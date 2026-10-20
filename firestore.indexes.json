@@ -1,0 +1,29 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "enrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "course_id", "order": "ASCENDING"},
+        {"fieldPath": "student_id", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "grades",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "course_id", "order": "ASCENDING"},
+        {"fieldPath": "student_id", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "attendance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "course_id", "order": "ASCENDING"},
+        {"fieldPath": "student_id", "order": "ASCENDING"}
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

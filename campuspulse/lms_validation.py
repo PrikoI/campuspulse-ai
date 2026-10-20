@@ -59,6 +59,9 @@ def tool_arguments(spec, args):
     if spec["name"] == "query_data":
         from .lms_data import query_request
         return query_request(clean)
+    if spec["name"] == "prepare_personal_change":
+        from .firestore_personal import personal_change
+        return personal_change(clean)
     if "course_id" in clean:
         clean["course_id"] = identifier(clean["course_id"])
     if "target" in clean:
@@ -71,10 +74,13 @@ def tool_arguments(spec, args):
 
 
 def agent_payload(payload):
-    allowed = {"message", "course_id", "page", "engine", "target", "hours_per_day", "extra_busy", "data_query"}
+    allowed = {"message", "course_id", "page", "engine", "target", "hours_per_day", "extra_busy", "data_query", "personal_change"}
     if not isinstance(payload, dict) or set(payload) - allowed:
         raise LmsError("Неизвестные поля запроса. Идентификатор студента берётся из сессии.")
     clean = dict(payload)
+    if "personal_change" in clean:
+        from .firestore_personal import personal_change
+        clean["personal_change"] = personal_change(clean["personal_change"])
     if "data_query" in clean:
         from .lms_data import query_request
         clean["data_query"] = query_request(clean["data_query"])
@@ -105,7 +111,7 @@ def record_payload(kind, payload, record_id=None):
             clean[key] = identifier(value, key)
         elif key in {"code", "name", "title", "description", "text", "comment", "kind"}:
             limit = {"code": 80, "name": 200, "description": 10000, "text": 50000, "comment": 2000}.get(key, 200)
-            clean[key] = text(value, key, limit, required=key not in {"description", "comment"})
+            clean[key] = text(value, key, limit, required=key not in {"description", "comment", "kind"})
         elif key == "archived":
             if not isinstance(value, bool):
                 raise LmsError("archived: нужно логическое значение.")

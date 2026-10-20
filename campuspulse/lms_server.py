@@ -123,6 +123,7 @@ class LmsHandler(Handler):
                        ("admin", "users"): {"GET"}, ("admin", "students"): {"POST"},
                        ("agent", "query"): {"POST"}, ("agent", "stream"): {"POST"},
                        ("data", "resources"): {"GET"}, ("data", "query"): {"POST"},
+                       ("personal",): {"GET"}, ("actions", "prepare"): {"POST"}, ("actions", "confirm"): {"POST"},
                        ("grade-summary",): {"GET"}, ("attendance-summary",): {"GET"}}
             supported = methods.get(tuple(route))
             if len(route) == 1 and route[0] in KINDS:
@@ -187,6 +188,16 @@ class LmsHandler(Handler):
                 return self.json_reply({"logged_out": True})
             if route == ["me"] and method == "GET":
                 return self.json_reply({"user": actor.public()})
+            if route in [["personal"], ["actions", "prepare"], ["actions", "confirm"]]:
+                if not callable(getattr(self.repository, "personal_data", None)):
+                    raise LmsError("Личное хранилище не подключено.", 503)
+                if route == ["personal"]:
+                    return self.json_reply(self.repository.personal_data(actor))
+                if route[-1] == "prepare":
+                    return self.json_reply(self.repository.prepare_personal_change(actor, payload))
+                if set(payload) != {"proposal", "confirmed"} or payload["confirmed"] is not True:
+                    raise LmsError("Нужны proposal и confirmed=true после проверки изменения пользователем.")
+                return self.json_reply(self.repository.confirm_personal_change(actor, payload["proposal"]))
             if route == ["data", "resources"] and method == "GET":
                 return self.json_reply(self.repository.data_resources(actor))
             if route == ["data", "query"] and method == "POST":
@@ -291,13 +302,17 @@ def main():
         return
     if importlib.util.find_spec("mcp") is None:
         raise SystemExit("MCP missing. Install requirements.txt into the project .venv. No direct fallback is used.")
+    if args.check:
+        selected = os.getenv("CAMPUSPULSE_LMS_REPOSITORY", "pending")
+        missing = sorted({name for name, _ in FRONTEND_FILES.values() if not (LMS_WEB / name).is_file()})
+        if missing:
+            raise SystemExit("Frontend missing: " + ", ".join(missing))
+        print(f"OK: repository selection={selected}, MCP installed, frontend present; repository/ADC not opened; no database/model request performed.")
+        return
     try:
         repository = open_repository()
     except LmsError as error:
         raise SystemExit(str(error)) from None
-    if args.check:
-        print(f"OK: repository={repository.source}, temporary local auth, MCP installed; no database/model/network request performed.")
-        return
     try:
         server = ThreadingHTTPServer(("127.0.0.1", args.port), LmsHandler)
     except OSError:

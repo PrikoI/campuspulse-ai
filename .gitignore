@@ -7,3 +7,6 @@ build/
 *.log
 *credentials*.json
 deployment.json
+firebase-key.json
+**/firebase-key*.json
+**/*service-account*.json
