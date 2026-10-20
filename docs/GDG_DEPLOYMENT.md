@@ -61,6 +61,44 @@ The server signs application sessions; the remote class verifies them and derive
 
 The Docker build has an explicit source allowlist. JSON credentials, `.env`, `.local`, Git and output files are excluded from upload/build. No service key is needed in the cloud container: use its attached service account.
 
+### Deploy from GitHub Actions
+
+`.github/workflows/deploy-cloud-run.yml` deploys the **private** UI/API service
+when code is pushed to `main`, or when started manually from the Actions tab.
+It uses GitHub OIDC with Google Workload Identity Federation; do not create or
+upload a service-account JSON key.
+
+Configure GitHub repository **Settings → Secrets and variables → Actions →
+Variables** with:
+
+| Variable | Value |
+| --- | --- |
+| `GCP_PROJECT_ID` | GCP project that owns the Cloud Run service |
+| `GCP_REGION` | Cloud Run region, for example `us-central1` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full Workload Identity Provider resource name |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | Service-account email impersonated by GitHub Actions |
+| `GCP_RUNTIME_SERVICE_ACCOUNT` | Service-account email attached to Cloud Run |
+| `FIREBASE_PROJECT_ID` | Firebase project containing the LMS Firestore data |
+| `LMS_SESSION_SECRET_NAME` | Existing Secret Manager secret name for the shared session secret |
+| `CAMPUSPULSE_AGENT_ENGINE_RESOURCE` | Optional existing Agent Engine resource name; blank if unused |
+
+In GCP, enable Cloud Run, Cloud Build, Artifact Registry, and IAM Credentials
+APIs. Configure a Workload Identity Pool/Provider restricted to this GitHub
+repository and the `main` branch (`assertion.repository ==
+'PrikoI/campuspulse-ai'` and `assertion.ref == 'refs/heads/main'`). Grant the
+provider's deploy service account `roles/iam.workloadIdentityUser` for that
+repository principal. The deploy service account needs permission to deploy
+Cloud Run revisions, start Cloud Build source builds, and act as the runtime
+service account. The runtime service account needs Firestore access, access to
+the session-secret version, and permission to invoke Agent Engine if configured.
+Grant only the roles required by your organization's IAM policy.
+
+The workflow deliberately deploys with `--no-allow-unauthenticated`: the
+project still uses temporary demo login, so making the service public could
+expose student data. An authorized operator can access it with the Cloud Run
+proxy described below. A successful Action builds and deploys a revision; it
+does not set up Firestore data, create the secret, or configure IAM for you.
+
 ```powershell
 gcloud run deploy campuspulse-ui --project $project --region $region --source . --service-account $runtimeAccount --no-allow-unauthenticated --min-instances 0 --max-instances 1 --concurrency 2 --timeout 300 --set-env-vars "CAMPUSPULSE_LMS_REPOSITORY=firestore,CAMPUSPULSE_FIREBASE_PROJECT=$firebaseProject,CAMPUSPULSE_FIREBASE_CREDENTIALS=adc,CAMPUSPULSE_AGENT_ENGINE_RESOURCE=$agentResource,CAMPUSPULSE_DEMO_STUDENTS=student1" --set-secrets "CAMPUSPULSE_LMS_SESSION_SECRET=${secretId}:latest"
 $origin = gcloud run services describe campuspulse-ui --project $project --region $region --format 'value(status.url)'

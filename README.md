@@ -64,6 +64,12 @@ project documentation is in [`docs/`](docs/), including the
 [API reference](docs/LMS_API.md), [frontend guide](docs/FRONTEND.md), and
 [database contract](docs/LMS_DATABASE_CONTRACT.md).
 
+To deploy from GitHub, configure Workload Identity Federation and the repository
+variables listed in [the Cloud Run deployment guide](docs/GDG_DEPLOYMENT.md),
+then push to `main` or run the workflow manually from GitHub Actions. The
+workflow keeps the Cloud Run service private; authentication and Firestore
+permissions must be configured in GCP first.
+
 ## Credentials and repository contents
 
 Never commit `.env`, API keys, service-account credentials, Firebase private
