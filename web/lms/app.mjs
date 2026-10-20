@@ -2,7 +2,7 @@ import {schedule} from './schedule.mjs';
 import {enrollments} from './academics.mjs';
 import {courseList} from './courses.mjs';
 import {gradebook} from './gradebook.mjs';
-import {api,onUnauthorized} from './api.mjs';
+import {api,onUnauthorized,studentSession} from './api.mjs';
 import {element,showError,studyPlan} from './ui.mjs';
 import {personalForm} from './forms.mjs';
 import {bindAgent} from './agent.mjs';
@@ -11,10 +11,20 @@ import {collectionPage,dataBrowser} from './screens.mjs';
 
 const $=selector=>document.querySelector(selector);
 const pages={students:'Студенты',courses:'Дисциплины',enrollments:'Зачисление',assignments:'Задания',grade_items:'Работы',materials:'Материалы',grades:'Оценки',attendance:'Посещаемость',schedule:'Расписание',plan:'План подготовки',data:'Доступные данные',personal:'Личные задачи'};
-let user=null,page='courses',requestVersion=0,pendingProposal=null;
+let user=null,page='courses',requestVersion=0,pendingProposal=null,openingSession=null;
 
-function reset(){user=null;requestVersion++;pendingProposal=null;stopAgent();delete $('#workspace').dataset.role;$('#workspace').hidden=true;$('#login-panel').hidden=false;$('#logout').hidden=true;$('#identity').textContent='';$('#content').replaceChildren();$('#review').hidden=true;$('#course').replaceChildren(new Option('Все дисциплины',''));}
-onUnauthorized(reset);
+function reset(){user=null;requestVersion++;pendingProposal=null;stopAgent();delete $('#workspace').dataset.role;$('#workspace').hidden=true;$('#session-panel').hidden=false;$('#identity').textContent='';$('#content').replaceChildren();$('#review').hidden=true;$('#course').replaceChildren(new Option('Все дисциплины',''));}
+onUnauthorized(()=>{if(!openingSession)void openStudent();});
+function openStudent(){
+  if(openingSession)return openingSession;
+  reset();$('#error').textContent='';$('#session-spinner').hidden=false;$('#session-retry').hidden=true;$('#session-message').textContent='Открываем ваш учебный кабинет…';
+  openingSession=(async()=>{
+    try{signedIn(await studentSession());}
+    catch(error){$('#session-spinner').hidden=true;$('#session-message').textContent='Не удалось открыть учебный кабинет';$('#session-retry').hidden=false;showError(error);}
+    finally{openingSession=null;}
+  })();
+  return openingSession;
+}
 function review(proposal){pendingProposal=proposal;reviewChange($('#review-data'),proposal.change);$('#review').hidden=false;$('#review').scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'nearest'});}
 const prepare=async change=>{const actor=user,proposal=await api('actions/prepare',{method:'POST',body:change});if(actor===user)review(proposal);};
 const stopAgent=bindAgent(()=>({page:['personal','data','students','enrollments','grade_items'].includes(page)?'overview':page,...($('#course').value?{course_id:$('#course').value}:{})}),review);
@@ -64,17 +74,17 @@ async function load(){
   finally{loading.remove();if(active()){target.hidden=false;target.removeAttribute('aria-busy');}}
 }
 
-function signedIn(actor){user=actor;$('#login-panel').hidden=true;$('#workspace').dataset.role=actor.role;$('#workspace').hidden=false;$('#logout').hidden=false;$('#identity').textContent=actor.name;$('#agent-panel').hidden=actor.role!=='student';
+function signedIn(actor){user=actor;$('#session-panel').hidden=true;$('#workspace').dataset.role=actor.role;$('#workspace').hidden=false;$('#identity').textContent=actor.name;$('#agent-panel').hidden=actor.role!=='student';
   const available=actor.role==='admin'?['courses','students','enrollments','assignments','grade_items','grades','attendance','materials','schedule','data']:['courses','assignments','materials','grades','attendance','schedule','plan','personal','data'];
   $('#navigation').replaceChildren();for(const name of available){const button=element('button',pages[name],$('#navigation'));button.type='button';button.dataset.page=name;button.addEventListener('click',()=>navigate(name));}navigate('courses');
 }
-$('#login').addEventListener('submit',async event=>{event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;const data=new FormData(event.currentTarget);try{const result=await api('auth/login',{method:'POST',body:{username:data.get('username'),password:data.get('password')}});event.target.reset();signedIn(result.user);}catch(error){showError(error);}finally{button.disabled=false;}});
-$('#logout').addEventListener('click',async()=>{try{await api('auth/logout',{method:'POST',body:{}});reset();}catch(error){showError(error);}});
+$('#session-retry').addEventListener('click',()=>void openStudent());
 $('#course').addEventListener('change',load);
 $('#confirm').addEventListener('click',async()=>{if(!pendingProposal)return;$('#confirm').disabled=true;try{await api(pendingProposal.change?.target==='study_plan'?'actions/confirm-plan':'actions/confirm',{method:'POST',body:{proposal:pendingProposal.proposal,confirmed:true}});pendingProposal=null;$('#review').hidden=true;await load();}catch(error){showError(error);}finally{$('#confirm').disabled=false;}});
 $('#cancel').addEventListener('click',()=>{pendingProposal=null;$('#review').hidden=true;});
 $('#agent-prompts')?.addEventListener('click',event=>{if(event.target.tagName==='BUTTON'){$('#agent textarea').value=event.target.textContent;$('#agent textarea').focus();}});
 try{document.documentElement.dataset.theme=localStorage.getItem('campuspulse-theme')||'light';}catch{}
 $('#theme').addEventListener('click',()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;try{localStorage.setItem('campuspulse-theme',theme);}catch{}});
-try{const data=await api('status'),model=data.llm||data.vertex;$('#status').textContent=`${data.team_database_connected?'Учебные данные доступны':'Нет подключения к учебным данным'} · ${model?.calls_enabled?'AI-помощник готов':'AI-помощник ожидает настройки'}`;const pill=document.querySelector('.live-pill');if(pill)pill.textContent=data.team_database_connected?'● База подключена':'○ Нет подключения';const option=document.querySelector('#agent select option[value="llm"]');if(option&&model?.model)option.textContent=model.model;}catch(error){showError(error);}
-try{const data=await api('me');signedIn(data.user);}catch(error){if(error.status!==401)showError(error);}
+const initialSession=openStudent();
+try{const data=await api('status'),model=data.llm||data.vertex;$('#status').textContent=`${data.team_database_connected?'Учебные данные доступны':'Нет подключения к учебным данным'} · ${model?.calls_enabled?'AI-помощник готов':'AI-помощник ожидает настройки'}`;const pill=document.querySelector('.live-pill');if(pill)pill.textContent=data.team_database_connected?'● База подключена':'○ Нет подключения';const option=document.querySelector('#agent select option[value="llm"]');if(option&&model?.model)option.textContent=model.model;}catch(error){$('#status').textContent='Не удалось проверить подключение к серверу';showError(error);}
+await initialSession;

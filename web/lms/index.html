@@ -5,13 +5,15 @@
 <header class="topbar">
   <div class="brand"><span class="brand-mark">C</span><strong>CampusPulse <b>AI</b></strong></div>
   <div class="top-search" aria-hidden="true">⌕ <span>Поиск по курсам и заданиям</span><kbd>⌘ K</kbd></div>
-  <div class="top-actions"><button id="theme" class="icon-button" type="button" title="Сменить тему">◐</button><span id="identity"></span><button id="logout" class="secondary" type="button" hidden>Выйти</button></div>
+  <div class="top-actions"><button id="theme" class="icon-button" type="button" title="Сменить тему">◐</button><span id="identity"></span></div>
 </header>
 <p id="status" class="system-status" role="status">Проверка сервера…</p>
 <main class="app-root">
-  <section id="login-panel" class="login-card">
-    <div class="login-copy"><span class="eyebrow">ЕДИНОЕ УЧЕБНОЕ ПРОСТРАНСТВО</span><h1>Учёба под контролем</h1><p>Расписание, задания, оценки и AI-помощник в одном аккуратном интерфейсе.</p></div>
-    <form id="login" class="login-form"><h2>Вход в CampusPulse</h2><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button>Войти</button></form>
+  <section id="session-panel" class="session-panel" aria-label="Подключение к учебному кабинету">
+    <span id="session-spinner" class="loading-spinner" aria-hidden="true"></span>
+    <p id="session-message" role="status">Открываем ваш учебный кабинет…</p>
+    <button id="session-retry" class="secondary" type="button" hidden>Попробовать снова</button>
+    <noscript>Для работы учебного кабинета включите JavaScript в браузере.</noscript>
   </section>
   <section id="workspace" class="workspace" hidden>
     <aside class="sidebar">

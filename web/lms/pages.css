@@ -1,4 +1,6 @@
 /* Content views share the existing cabinet palette and typography. */
+.session-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:360px;padding:32px;text-align:center;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:18px}
+.session-panel p{margin:0;font-size:14px}.session-panel .loading-spinner{width:30px;height:30px}.session-panel button{font-size:13px}
 .view-intro{margin:0 0 20px;color:var(--muted);font-size:14px;line-height:1.65;max-width:720px}
 .course-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(245px,100%),1fr));gap:18px}
 .course-card{--course-color:#2563eb;display:flex;flex-direction:column;min-width:0;padding:22px;border:1px solid var(--border);border-top:3px solid var(--course-color);border-radius:16px;background:var(--panel);transition:box-shadow .2s,border-color .2s}

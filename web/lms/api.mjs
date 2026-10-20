@@ -15,6 +15,17 @@ export async function api(path, {method = 'GET', body, signal} = {}) {
   if (!response.ok) return failure(response);
   return response.json();
 }
+export async function studentSession(request = api) {
+  // Temporary demo entry uses the same signed HttpOnly session as normal login.
+  let current;
+  try { current = await request('me'); }
+  catch (error) { if (error.status !== 401) throw error; }
+  const isStudentOne = actor => actor?.id === 'student1' && actor.role === 'student';
+  if (isStudentOne(current?.user)) return current.user;
+  const result = await request('auth/login', {method:'POST', body:{username:'student1',password:'student1'}});
+  if (!isStudentOne(result?.user)) throw new Error('Не удалось открыть кабинет студента 1.');
+  return result.user;
+}
 export async function readEvents(response, receive) {
   if (!response.ok) return failure(response);
   if (!response.body) throw new Error('Поток ответа отсутствует');
