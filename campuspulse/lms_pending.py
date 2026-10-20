@@ -17,6 +17,17 @@ from .domain import TZ
 from .lms_store import LmsError, Principal, password_hash
 from .lms_validation import collection, identifier, record_payload, student_payload
 
+DEV_ACCOUNTS = {
+    "admin": ("admin", "Преподаватель", "admin"),
+    "teacher1": ("teacher1", "Преподаватель 1", "admin"),
+    "teacher2": ("teacher2", "Преподаватель 2", "admin"),
+    "student1": ("student1", "Студент 1", "student"),
+    "student2": ("student2", "Студент 2", "student"),
+    "student3": ("student3", "Студент 3", "student"),
+    "student4": ("student4", "Студент 4", "student"),
+    "student5": ("student5", "Студент 5", "student"),
+}
+
 
 class PendingRepository:
     source = "not-connected"
@@ -24,7 +35,7 @@ class PendingRepository:
 
     def __init__(self):
         self.secret = os.getenv("CAMPUSPULSE_LMS_SESSION_SECRET") or secrets.token_urlsafe(48)
-        self._credentials = {uid: password_hash(uid) for uid in ["admin", "student1", "student2"]}
+        self._credentials = {uid: password_hash(account[0]) for uid, account in DEV_ACCOUNTS.items()}
         self._revoked = set()
         self._usage = {}
         self._lock = threading.Lock()
@@ -39,7 +50,8 @@ class PendingRepository:
         valid = hmac.compare_digest(stored, password_hash(password, stored.split(":")[0]))
         if username not in self._credentials or not valid:
             raise LmsError("Неверный логин или пароль.", 401)
-        actor = Principal(username, "admin" if username == "admin" else "student", "Преподаватель" if username == "admin" else f"Тестовая сессия {username}")
+        _, name, role = DEV_ACCOUNTS[username]
+        actor = Principal(username, role, name)
         payload = {**actor.public(), "exp": time.time()+28800, "nonce": secrets.token_hex(16)}
         body = base64.urlsafe_b64encode(json.dumps(payload, ensure_ascii=False).encode()).decode().rstrip("=")
         return body + "." + self._signature(body), actor

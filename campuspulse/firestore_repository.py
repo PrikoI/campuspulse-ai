@@ -13,7 +13,7 @@ from .firestore_client import FirebaseConfig, FirestoreStorage, firebase_client
 from .firestore_personal import PersonalDataMixin
 from .grading import policy_config
 from .lms_data import RESERVED_FILTERS, check_query_catalog, query_request
-from .lms_pending import PendingRepository
+from .lms_pending import DEV_ACCOUNTS, PendingRepository
 from .lms_json import json_value
 from .lms_store import FIELDS, KINDS, LmsError, Principal
 from .lms_team_adapter import TeamRepository
@@ -21,7 +21,7 @@ from .lms_validation import collection, identifier, record_payload, student_payl
 
 
 DEFAULTS = {
-    "courses": {"archived": False}, "enrollments": {"archived": False},
+    "courses": {"archived": False, "instructor_ids": []}, "enrollments": {"archived": False},
     "assignments": {"description": "", "due": None, "minutes": None, "week": None},
     "grade_items": {"max_score": 100, "weight": 1, "week": None},
     "grades": {"comment": ""}, "lessons": {"kind": ""},
@@ -160,11 +160,15 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
             row = self.storage.get(f"courses/{course_id}", tx, fields=sorted(FIELDS["courses"] | {"owner_id"}))
             if row is None or (actor.role == "student" and row.get("archived", False)):
                 return {}
-            if actor.role == "admin" and row.get("owner_id") != actor.user_id:
+            if actor.role == "admin" and actor.user_id not in {row.get("owner_id"), *row.get("instructor_ids", [])}:
                 return {}
             return {course_id: row}
         if actor.role == "admin":
-            return dict(self._scan("courses", [("owner_id", "==", actor.user_id)], tx, fields=sorted(FIELDS["courses"])))
+            owned = self._scan("courses", [("owner_id", "==", actor.user_id)], tx,
+                               fields=sorted(FIELDS["courses"] | {"owner_id"}))
+            assigned = self._scan("courses", [("instructor_ids", "array_contains", actor.user_id)], tx,
+                                  fields=sorted(FIELDS["courses"] | {"owner_id"}))
+            return dict([*owned, *assigned])
         enrollments = self._scan("enrollments", [("student_id", "==", actor.user_id)], tx, fields=sorted(FIELDS["enrollments"]))
         state = self._snapshot.get()
         if state is not None:
@@ -346,14 +350,16 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
             previous = {field: json_value(value) for field, value in (current or {}).items() if field in FIELDS[kind]}
             merged = {**DEFAULTS[kind], **previous, **clean}
             if kind == "courses":
-                if current is not None and current.get("owner_id") != actor.user_id:
+                if current is not None and actor.user_id not in {current.get("owner_id"), *current.get("instructor_ids", [])}:
                     raise LmsError("Нет прав на изменение курса.", 403)
+                if "instructor_ids" in clean and current is not None and current.get("owner_id") != actor.user_id:
+                    raise LmsError("Назначать преподавателей может только владелец курса.", 403)
                 merged["policy"] = policy_config(merged.get("policy"))
             else:
                 for cid in {merged["course_id"], previous.get("course_id", merged["course_id"])}:
                     course = self.storage.get(f"courses/{cid}", tx)
-                    if course is None or course.get("owner_id") != actor.user_id:
-                        raise LmsError("Курс отсутствует или принадлежит другому преподавателю.", 403)
+                    if course is None or actor.user_id not in {course.get("owner_id"), *course.get("instructor_ids", [])}:
+                        raise LmsError("Курс отсутствует или не назначен этому преподавателю.", 403)
                 if keys and current and any(merged[field] != previous[field] for field in keys):
                     raise LmsError("Связи этой записи неизменяемы; архивируйте зачисление.", 409)
                 if kind in {"enrollments", "grades", "attendance"}:
@@ -464,8 +470,7 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
     def users(self, actor):
         self.require_admin(actor)
         def read(tx):
-            enrollments = self._list("enrollments", actor, None, tx)
-            ids = {row["student_id"] for row in enrollments}
+            ids = {uid for uid, account in DEV_ACCOUNTS.items() if account[2] == "student"}
             profiles = self.storage.get_many([f"users/{uid}" for uid in sorted(ids)], tx, fields=["name", "role"])
             return [{"id": path.split("/")[-1], "role": "student", "name": row.get("name", "")}
                     for path, row in profiles.items() if row is not None and row.get("role") == "student"]

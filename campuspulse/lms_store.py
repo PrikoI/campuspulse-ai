@@ -9,7 +9,7 @@ from typing import Protocol
 
 KINDS = {"courses", "enrollments", "assignments", "grade_items", "grades", "lessons", "attendance", "materials"}
 FIELDS = {
-    "courses": {"code", "name", "policy", "archived"},
+    "courses": {"code", "name", "policy", "archived", "instructor_ids"},
     "enrollments": {"course_id", "student_id", "archived"},
     "assignments": {"course_id", "title", "description", "due", "minutes", "week"},
     "grade_items": {"course_id", "title", "component", "max_score", "weight", "week"},
@@ -72,5 +72,4 @@ def text(value, name, limit=200, required=True):
     if not isinstance(value, str) or len(value) > limit or (required and not value.strip()):
         raise LmsError(f"{name}: строка от {1 if required else 0} до {limit} символов.")
     return value.strip()
-
 

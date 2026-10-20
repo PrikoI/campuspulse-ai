@@ -19,8 +19,15 @@ from .lms_validation import identifier
 from .lms_openapi import openapi_document
 from .lms_data import query_request
 from .vertex_gemini import vertex_status
+from .llm_provider import llm_status
 from .grading import evaluate_grades
-from .server import Handler, LIMIT, SLOTS, exception_leaves
+from .server import Handler, LIMIT, exception_leaves
+
+try:
+    LMS_CONCURRENCY = max(4, min(256, int(os.getenv("CAMPUSPULSE_LMS_CONCURRENCY", "64"))))
+except ValueError:
+    LMS_CONCURRENCY = 64
+LMS_SLOTS = threading.BoundedSemaphore(LMS_CONCURRENCY)
 
 LOGIN_ATTEMPTS = {}
 LOGIN_LOCK = threading.Lock()
@@ -113,8 +120,8 @@ class LmsHandler(Handler):
     def dispatch_lms(self, method):
         if not self.trusted_host():
             return
-        if not SLOTS.acquire(blocking=False):
-            self.json_reply({"error": "Два запроса уже выполняются. Подожди."}, 429); return
+        if not LMS_SLOTS.acquire(timeout=10):
+            self.json_reply({"error": "Сервер занят. Запрос слишком долго ожидал выполнения."}, 503); return
         self.sse_started = False
         try:
             parsed = urlparse(self.path)
@@ -161,7 +168,7 @@ class LmsHandler(Handler):
                     "team_database_connected": self.repository.team_database_connected, "cloud_deployed": False, "default_engine": "local",
                     "mcp_available": importlib.util.find_spec("mcp") is not None, "auto_model_calls": False,
                     "transport": getattr(self.server, "transport", "mcp"), "authentication": "temporary-local",
-                    "vertex": vertex_status(), "gemini_available": False,
+                    "vertex": vertex_status(), "llm": llm_status(), "gemini_available": False,
                     "frontend_connected": all((LMS_WEB / name).is_file() for name, _ in FRONTEND_FILES.values()), "openapi": "/api/v1/openapi.json",
                     "notice": "Командная база не подключена. Собственные базы и учебные примеры не используются." if not self.repository.team_database_connected else "Используется адаптер команды."})
             if route == ["openapi.json"] and method == "GET":
@@ -285,7 +292,7 @@ class LmsHandler(Handler):
             else:
                 self.json_reply({"error": message, "data_access": getattr(safe, "data_access", [])}, status)
         finally:
-            SLOTS.release()
+            LMS_SLOTS.release()
 
     def emit(self, event):
         self.wfile.write(("data: " + json.dumps(event, ensure_ascii=False) + "\n\n").encode())

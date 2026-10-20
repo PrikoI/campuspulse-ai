@@ -89,8 +89,8 @@ def agent_payload(payload):
         clean["course_id"] = identifier(clean["course_id"])
     if not isinstance(clean.get("page", "overview"), str) or clean.get("page", "overview") not in PAGES:
         raise LmsError("Неизвестная страница LMS.")
-    if not isinstance(clean.get("engine", "local"), str) or clean.get("engine", "local") not in {"local", "gemini"}:
-        raise LmsError("Режим: local или gemini.")
+    if not isinstance(clean.get("engine", "local"), str) or clean.get("engine", "local") not in {"local", "gemini", "llm"}:
+        raise LmsError("Режим: local, llm или gemini.")
     if "target" in clean:
         clean["target"] = float(number(clean["target"], "Целевой итог"))
     clean["hours_per_day"], clean["extra_busy"] = planning_options(clean.get("hours_per_day", 3), clean.get("extra_busy", []))
@@ -115,6 +115,10 @@ def record_payload(kind, payload, record_id=None):
         elif key == "archived":
             if not isinstance(value, bool):
                 raise LmsError("archived: нужно логическое значение.")
+        elif key == "instructor_ids":
+            if not isinstance(value, list) or len(value) > 20 or len(set(value)) != len(value):
+                raise LmsError("instructor_ids: ожидается список до 20 уникальных преподавателей.")
+            clean[key] = [identifier(item, "instructor_id") for item in value]
         elif key == "component":
             if not isinstance(value, str) or value not in COMPONENTS:
                 raise LmsError("Неизвестный компонент оценки.")

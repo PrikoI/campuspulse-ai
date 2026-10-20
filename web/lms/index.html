@@ -1,14 +1,36 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CampusPulse AI — LMS</title><link rel="stylesheet" href="/lms-assets/style.css"></head>
-<body><header><strong>CampusPulse <span>AI</span></strong><button id="theme" type="button">Тема</button><span id="identity"></span><button id="logout" type="button" hidden>Выйти</button></header>
-<p id="status" role="status">Проверка сервера…</p>
-<main><section id="login-panel"><h1>Ваш учебный день</h1><p>Войдите в LMS. Данные доступны только в рамках вашей сессии.</p>
-<form id="login"><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button>Войти</button></form></section>
-<section id="workspace" hidden><nav id="navigation" aria-label="Разделы LMS"></nav><label>Дисциплина<select id="course"><option value="">Все доступные</option></select></label>
-<section><h1 id="page-title"></h1><div id="content"></div></section>
-<aside id="agent-panel"><h2>Учебный помощник</h2><p>local — проверяемые функции. Vertex AI требует отдельного разрешённого подключения.</p>
-<form id="agent"><label>Запрос<textarea name="message" maxlength="5000" required></textarea></label><label>Режим<select name="engine"><option value="local">local</option><option value="gemini">Vertex AI</option></select></label><button>Спросить</button></form>
-<p id="answer" role="status"></p><details><summary>Действия инструментов</summary><pre id="trace"></pre></details></aside>
-<section id="review" hidden><h2>Проверьте изменение</h2><pre id="review-data"></pre><button id="confirm" type="button">Подтвердить запись</button><button id="cancel" type="button">Отменить</button></section>
-</section><p id="error" role="alert"></p></main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">C</span><strong>CampusPulse <b>AI</b></strong></div>
+  <div class="top-search" aria-hidden="true">⌕ <span>Поиск по курсам и заданиям</span><kbd>⌘ K</kbd></div>
+  <div class="top-actions"><button id="theme" class="icon-button" type="button" title="Сменить тему">◐</button><span id="identity"></span><button id="logout" class="secondary" type="button" hidden>Выйти</button></div>
+</header>
+<p id="status" class="system-status" role="status">Проверка сервера…</p>
+<main class="app-root">
+  <section id="login-panel" class="login-card">
+    <div class="login-copy"><span class="eyebrow">ЕДИНОЕ УЧЕБНОЕ ПРОСТРАНСТВО</span><h1>Учёба под контролем</h1><p>Расписание, задания, оценки и AI-помощник в одном аккуратном интерфейсе.</p></div>
+    <form id="login" class="login-form"><h2>Вход в CampusPulse</h2><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button>Войти</button></form>
+  </section>
+  <section id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <div class="profile-card"><span class="avatar">CP</span><div><strong>CampusPulse LMS</strong><small>Учебный кабинет</small></div></div>
+      <label class="course-picker">Текущая дисциплина<select id="course"><option value="">Все дисциплины</option></select></label>
+      <nav id="navigation" aria-label="Разделы LMS"></nav>
+      <div class="sidebar-note"><strong>Нужна помощь?</strong><span>Откройте AI-помощника справа.</span></div>
+    </aside>
+    <section class="content-panel">
+      <div class="page-heading"><div><span class="eyebrow">CAMPUSPULSE / LMS</span><h1 id="page-title"></h1></div><span class="live-pill">● Данные синхронизированы</span></div>
+      <div id="content"></div>
+    </section>
+    <aside id="agent-panel" class="assistant-panel">
+      <div class="assistant-heading"><span class="assistant-icon">✦</span><div><h2>AI-помощник</h2><small>Работает с вашими данными</small></div></div>
+      <p>Задайте вопрос об оценках, дедлайнах или составьте учебный план.</p>
+      <form id="agent"><label>Ваш вопрос<textarea name="message" maxlength="5000" placeholder="Что мне нужно сделать сегодня?" required></textarea></label><label>Режим<select name="engine"><option value="llm">LLM</option><option value="local">local</option></select></label><button>Отправить</button></form>
+      <p id="answer" role="status"></p><details><summary>Действия инструментов</summary><pre id="trace"></pre></details>
+    </aside>
+    <section id="review" class="review-panel" hidden><h2>Подтвердите изменение</h2><pre id="review-data"></pre><div class="button-row"><button id="confirm" type="button">Подтвердить</button><button id="cancel" class="secondary" type="button">Отменить</button></div></section>
+  </section>
+  <p id="error" role="alert"></p>
+</main><script type="module" src="/lms-assets/app.mjs"></script></body></html>

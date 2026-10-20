@@ -24,6 +24,7 @@ from campuspulse.lms_tools import LMS_SCHEMAS, LmsTools, schemas_for
 STUDENT = Principal("student1", "student", "Student")
 OTHER = Principal("student2", "student", "Other")
 ADMIN = Principal("admin", "admin", "Teacher")
+TEACHER1 = Principal("teacher1", "admin", "Teacher 1")
 CONFIG = FirebaseConfig("demo-campus", "(default)", "adc")
 
 
@@ -65,7 +66,11 @@ class MemoryStorage:
             doc_id = key.rsplit("/", 1)[1]
             if after is not None and doc_id <= after:
                 continue
-            if all(row.get(field) == value if op == "==" else row.get(field) in value for field, op, value in filters):
+            def matches(field, op, value):
+                if op == "==": return row.get(field) == value
+                if op == "array_contains": return value in row.get(field, [])
+                return row.get(field) in value
+            if all(matches(field, op, value) for field, op, value in filters):
                 selected = {field: row[field] for field in fields if field in row} if fields is not None else row
                 rows.append((doc_id, copy.deepcopy(selected)))
         return rows[:limit]
@@ -292,6 +297,24 @@ class RepositoryTests(unittest.TestCase):
             ids = list(pool.map(lambda _: self.repo.save("enrollments", ADMIN, payload)["id"], range(8)))
         self.assertEqual(set(ids), {compound_id("course", "student1")})
 
+    def test_assigned_teachers_can_grade_concurrently(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.repo.save("courses", ADMIN, {"instructor_ids": ["teacher1"]}, "course")
+        item = self.repo.save("grade_items", ADMIN, {"course_id": "course", "title": "Quiz", "component": "attestation1"})
+        payloads = [
+            (ADMIN, {"course_id": "course", "student_id": "student1", "item_id": item["id"], "score": 88}),
+            (TEACHER1, {"course_id": "course", "student_id": "student2", "item_id": item["id"], "score": 91}),
+        ]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            grades = list(pool.map(lambda args: self.repo.save("grades", *args), payloads))
+        self.assertEqual({grade["student_id"] for grade in grades}, {"student1", "student2"})
+        self.assertEqual({course["id"] for course in self.repo.list("courses", TEACHER1)}, {"course"})
+
+    def test_unassigned_teacher_cannot_change_course_access_list(self):
+        with self.assertRaises(LmsError) as caught:
+            self.repo.save("courses", Principal("teacher3", "admin", "Teacher 3"), {"instructor_ids": ["teacher3"]}, "course")
+        self.assertEqual(caught.exception.status, 403)
+
     def test_lesson_patch_checks_merged_dates(self):
         lesson = self.repo.save("lessons", ADMIN, {"course_id": "course", "title": "Lecture", "starts_at": "2030-01-01T10:00:00+05:00", "ends_at": "2030-01-01T11:00:00+05:00"})
         with self.assertRaises(LmsError):
@@ -340,6 +363,15 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.storage.writes, writes)
         with self.assertRaises(LmsError):
             self.repo.create_student(ADMIN, {"username": "new", "password": "secret", "name": "New"})
+
+    def test_additional_demo_students_login_without_storing_passwords(self):
+        for index in range(3, 6):
+            username = f"student{index}"
+            token, actor = self.repo.login(username, username)
+            self.assertTrue(token)
+            self.assertEqual(actor.user_id, username)
+            self.assertEqual(self.storage.data[f"users/{username}"],
+                             {"role": "student", "name": f"Студент {index}"})
 
     def test_existing_mcp_contracts_and_schedule_access(self):
         tools = LmsTools(self.repo, STUDENT)

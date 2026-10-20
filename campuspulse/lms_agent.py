@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from .vertex_gemini import VertexConfig, vertex_loop
+from .llm_provider import model_provider
 from .lms_store import LmsError
 from .lms_tools import LmsTools, schemas_for
 from .lms_validation import agent_payload, tool_arguments
@@ -97,14 +97,15 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
     if cid and repository.team_database_connected:
         await asyncio.to_thread(repository.check_course, actor, cid)
     engine = payload.get("engine", "local")
-    if engine not in {"local", "gemini"}:
-        raise LmsError("Режим: local или gemini.")
-    if engine == "gemini":
+    if engine not in {"local", "gemini", "llm"}:
+        raise LmsError("Режим: local или llm (gemini — совместимый alias).")
+    use_model = engine != "local"
+    if use_model:
         if not repository.team_database_connected:
-            raise LmsError("Командная база ещё не подключена. Gemini не вызывается, чтобы не расходовать квоту на отсутствующие данные. Для отладки используй local.", 503)
+            raise LmsError("Командная база ещё не подключена. LLM не вызывается. Для отладки используй local.", 503)
         if connection is not None:
-            raise LmsError("LMS использует Vertex AI через ADC; Developer API connection не принимается.")
-        config = VertexConfig.from_environment()
+            raise LmsError("LLM настраивается на сервере; connection в запросе не принимается.")
+        provider, config, model_loop = model_provider()
         config.require_enabled()
     trace, results = [], {}
     def report(event):
@@ -136,7 +137,7 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 result = tool_error(error)
                 report({"type": "tool_result", "tool": name, "status": "error", "error": result["error"]})
                 return result
-        if engine == "gemini":
+        if use_model:
             instruction = SYSTEM + f"\nОткрытая страница: {payload.get('page', 'overview')}. Предмет: {cid or 'не выбран'}."
             if callable(getattr(repository, "personal_data", None)):
                 instruction += "\nДля личных задач и настроек используй get_personal_data. prepare_personal_change только готовит изменение. Покажи before/after; пользователь подтверждает через отдельный API. Не утверждай, что предложение уже сохранено."
@@ -151,7 +152,7 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                     reserved = True
             async def model_invoke(name, arguments=None):
                 return model_result(await invoke(name, arguments))
-            answer = await vertex_loop(message, schemas_for(repository), model_invoke, config,
+            answer = await model_loop(message, schemas_for(repository), model_invoke, config,
                                        instruction, report, before_request=authorize_model_request)
         elif "personal_change" in payload:
             data = await invoke("prepare_personal_change", payload["personal_change"])
@@ -209,11 +210,11 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
             else:
                 data = await invoke("get_assignments", args)
                 answer = data["error"] if data.get("error") else f"Из LMS получено заданий: {len(data.get('assignments', []))}. Можно проверить оценки, посещаемость, материалы или рассчитать план."
-    return {"answer": answer, "engine": engine, "reasoning_loop": engine == "gemini", "trace": trace,
-            "transport": transport, "model_called": engine == "gemini",
-            "provider": "vertex-ai" if engine == "gemini" else "local",
-            "model": config.model if engine == "gemini" else None,
+    return {"answer": answer, "engine": engine, "reasoning_loop": use_model, "trace": trace,
+            "transport": transport, "model_called": use_model,
+            "provider": provider if use_model else "local",
+            "model": config.model if use_model else None,
             "results": results, "source": repository.source, "team_database_connected": repository.team_database_connected,
             "budget": {"max_model_steps": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
                        "model_queries_per_day": 10, "cloud_resources_created": False},
-            "notice": "Локальный режим — проверяемые функции, без генерации Gemini." if engine == "local" else "Ответ Gemini по инструментам; журнал содержит действия, не приватные мысли модели."}
+            "notice": "Локальный режим — проверяемые функции, без генерации LLM." if engine == "local" else "Ответ LLM по инструментам; журнал содержит действия, не приватные мысли модели."}
