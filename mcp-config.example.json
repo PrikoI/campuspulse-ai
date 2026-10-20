@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "campuspulse": {
+      "command": "C:/absolute/path/campuspulse-ai/.venv/Scripts/python.exe",
+      "args": ["-m", "campuspulse.mcp_server"],
+      "cwd": "C:/absolute/path/campuspulse-ai"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+mcp>=1.12,<2
+google-genai>=1.55,<2
+google-auth>=2.40,<3
+requests>=2.32,<3
+pypdf>=5,<7
+tzdata>=2025.1

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.local/
+build/
+*.log
+*credentials*.json
+deployment.json
