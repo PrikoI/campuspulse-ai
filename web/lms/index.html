@@ -1,7 +1,6 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CampusPulse AI — LMS</title><link rel="stylesheet" href="/lms-assets/style.css"></head>
-<<<<<<< HEAD
+<title>CampusPulse AI — LMS</title><link rel="stylesheet" href="/lms-assets/style.css"><link rel="stylesheet" href="/lms-assets/pages.css"></head>
 <body>
 <header class="topbar">
   <div class="brand"><span class="brand-mark">C</span><strong>CampusPulse <b>AI</b></strong></div>
@@ -26,28 +25,16 @@
       <div id="content"></div>
     </section>
     <aside id="agent-panel" class="assistant-panel">
-      <div class="assistant-heading"><span class="assistant-icon">✦</span><div><h2>AI-помощник</h2><small>Работает с вашими данными</small></div></div>
-      <p>Задайте вопрос об оценках, дедлайнах или составьте учебный план.</p>
-      <form id="agent"><label>Ваш вопрос<textarea name="message" maxlength="5000" placeholder="Что мне нужно сделать сегодня?" required></textarea></label><label>Режим<select name="engine"><option value="llm">LLM</option><option value="local">local</option></select></label><button>Отправить</button></form>
-      <p id="answer" role="status"></p><details><summary>Действия инструментов</summary><pre id="trace"></pre></details>
+      <div class="assistant-heading"><span class="assistant-icon" aria-hidden="true">✦</span><div><h2>AI-помощник</h2><small>Ваш учебный чат</small></div><button id="new-chat" class="chat-new secondary" type="button" title="Очистить текущий диалог">Новый чат</button></div>
+      <div id="chat-messages" class="chat-messages" role="log" aria-label="Диалог с AI-помощником" aria-live="polite" aria-relevant="additions text"></div>
+      <form id="agent" class="chat-composer">
+        <label class="chat-input-label" for="chat-input">Сообщение помощнику</label>
+        <textarea id="chat-input" name="message" rows="2" maxlength="5000" placeholder="Спросите об учёбе…" required></textarea>
+        <div class="chat-composer-actions"><label class="chat-engine">Режим<select name="engine" aria-label="Режим помощника"><option value="llm">LLM</option><option value="local">Без AI</option></select></label><button id="chat-stop" class="secondary" type="button" hidden>Остановить</button><button id="chat-send" type="submit" title="Отправить сообщение">Отправить <span aria-hidden="true">↑</span></button></div>
+        <small class="chat-hint">Enter — отправить · Shift+Enter — новая строка</small>
+      </form>
     </aside>
-    <section id="review" class="review-panel" hidden><h2>Подтвердите изменение</h2><pre id="review-data"></pre><div class="button-row"><button id="confirm" type="button">Подтвердить</button><button id="cancel" class="secondary" type="button">Отменить</button></div></section>
+    <section id="review" class="review-panel" hidden><h2>Подтвердите изменение</h2><div id="review-data"></div><div class="button-row"><button id="confirm" type="button">Подтвердить</button><button id="cancel" class="secondary" type="button">Отменить</button></div></section>
   </section>
   <p id="error" role="alert"></p>
 </main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
-=======
-<body><header><strong>CampusPulse <span>AI</span></strong><button id="theme" type="button">Тема</button><span id="identity"></span><button id="logout" type="button" hidden>Выйти</button></header>
-<p id="status" role="status">Проверка сервера…</p>
-<main><section id="login-panel"><h1>Ваш учебный день</h1><p>Войдите в LMS. Данные доступны только в рамках вашей сессии.</p>
-<form id="login"><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button>Войти</button></form></section>
-<section id="workspace" hidden><nav id="navigation" aria-label="Разделы LMS"></nav><label>Дисциплина<select id="course"><option value="">Все доступные</option></select></label>
-<section><h1 id="page-title"></h1><div id="content"></div></section>
-<aside id="agent-panel" class="agent-panel"><div class="agent-heading"><div><p class="eyebrow">CAMPUSPULSE ASSISTANT</p><h2>Меньше хаоса. Больше времени на учёбу.</h2></div><span class="agent-badge">MCP · Firestore · AI</span></div>
-<p>Спроси о дедлайнах, свободном времени и подготовке. Помощник проверяет данные твоих предметов.</p>
-<div id="agent-prompts" class="agent-prompts"><button type="button">Какие ближайшие дедлайны?</button><button type="button">Покажи расписание на неделю</button><button type="button">Составь и сохрани план подготовки на неделю</button></div>
-<form id="agent"><label>Чем помочь?<textarea name="message" maxlength="5000" placeholder="Составь план подготовки с учётом моих пар и дедлайнов" required></textarea></label><div class="agent-form-footer"><label>Режим<select name="engine"><option value="alem">Gemma · Alem AI</option><option value="local">Инструменты без модели</option><option value="gemini">Gemini · Vertex AI</option></select></label><button>Отправить запрос</button></div></form>
-<p id="agent-progress" role="status" hidden><span class="loading-spinner" aria-hidden="true"></span> Помощник работает…</p>
-<div id="activity" class="agent-activity" aria-live="polite"></div><p id="answer" role="status"></p><div id="agent-results"></div><details><summary>Технический журнал MCP</summary><pre id="trace"></pre></details></aside>
-<section id="review" hidden><h2>Проверьте изменение</h2><pre id="review-data"></pre><button id="confirm" type="button">Подтвердить запись</button><button id="cancel" type="button">Отменить</button></section>
-</section><p id="error" role="alert"></p></main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
->>>>>>> 126ecb7 (full rework)

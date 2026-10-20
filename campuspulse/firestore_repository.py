@@ -21,13 +21,8 @@ from .lms_validation import collection, identifier, record_payload, student_payl
 
 
 DEFAULTS = {
-<<<<<<< HEAD
     "courses": {"archived": False, "instructor_ids": []}, "enrollments": {"archived": False},
-    "assignments": {"description": "", "due": None, "minutes": None, "week": None},
-=======
-    "courses": {"archived": False}, "enrollments": {"archived": False},
-    "assignments": {"description": "", "due": None, "minutes": None, "week": None, "item_id":None, "lesson_id":None},
->>>>>>> 126ecb7 (full rework)
+    "assignments": {"description": "", "due": None, "minutes": None, "week": None, "item_id": None, "lesson_id": None},
     "grade_items": {"max_score": 100, "weight": 1, "week": None},
     "grades": {"comment": ""}, "lessons": {"kind": ""},
     "attendance": {}, "materials": {"week": None, "source_url": ""},
@@ -494,15 +489,10 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
     def users(self, actor):
         self.require_admin(actor)
         def read(tx):
-<<<<<<< HEAD
             ids = {uid for uid, account in DEV_ACCOUNTS.items() if account[2] == "student"}
             profiles = self.storage.get_many([f"users/{uid}" for uid in sorted(ids)], tx, fields=["name", "role"])
             return [{"id": path.split("/")[-1], "role": "student", "name": row.get("name", "")}
                     for path, row in profiles.items() if row is not None and row.get("role") == "student"]
-=======
-            profiles = self._scan('users',[('role','==','student')],tx,fields=['name','role'])
-            return [{"id": key, "role":"student", "name":row.get('name','')} for key,row in profiles]
->>>>>>> 126ecb7 (full rework)
         return self._run(actor, "users", "read", read, read_only=True)
 
     def create_student(self, actor, payload):

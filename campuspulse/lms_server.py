@@ -21,19 +21,14 @@ from .lms_data import query_request
 from .vertex_gemini import vertex_status
 from .llm_provider import llm_status
 from .grading import evaluate_grades
-<<<<<<< HEAD
 from .server import Handler, LIMIT, exception_leaves
+from .config import load_config
 
 try:
     LMS_CONCURRENCY = max(4, min(256, int(os.getenv("CAMPUSPULSE_LMS_CONCURRENCY", "64"))))
 except ValueError:
     LMS_CONCURRENCY = 64
 LMS_SLOTS = threading.BoundedSemaphore(LMS_CONCURRENCY)
-=======
-from .server import Handler, LIMIT, SLOTS, exception_leaves
-from .config import load_config
-from .alem_provider import alem_status
->>>>>>> 126ecb7 (full rework)
 
 LOGIN_ATTEMPTS = {}
 LOGIN_LOCK = threading.Lock()
@@ -44,9 +39,9 @@ FRONTEND_FILES = {
     "/lms": ("index.html", "text/html"),
     "/lms/": ("index.html", "text/html"),
     **{f"/lms-assets/{name}": (name, mime) for name, mime in {
-        "style.css": "text/css", "app.mjs": "text/javascript", "api.mjs": "text/javascript",
+        "style.css": "text/css", "pages.css":"text/css", "app.mjs": "text/javascript", "api.mjs": "text/javascript",
         "ui.mjs": "text/javascript", "forms.mjs": "text/javascript", "agent.mjs": "text/javascript",
-        "gradebook.mjs": "text/javascript", "courses.mjs": "text/javascript", "schedule.mjs": "text/javascript", "academics.mjs": "text/javascript",
+        "gradebook.mjs": "text/javascript", "courses.mjs": "text/javascript", "schedule.mjs": "text/javascript", "academics.mjs": "text/javascript", "views.mjs":"text/javascript", "screens.mjs":"text/javascript",
     }.items()},
 }
 
@@ -184,19 +179,13 @@ class LmsHandler(Handler):
                 if not isinstance(payload, dict):
                     raise LmsError("Ожидается объект JSON.")
             if route == ["status"] and method == "GET":
-                selected_provider=os.getenv('CAMPUSPULSE_LLM_PROVIDER','vertex')
-                llm=alem_status() if selected_provider=='alem' else vertex_status()
-                default_engine=('alem' if selected_provider=='alem' else 'gemini') if llm['calls_enabled'] else 'local'
-                if selected_provider!='alem' and os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE'):default_engine='gemini'
+                llm = llm_status()
+                default_engine = 'llm' if llm['calls_enabled'] else 'local'
                 return self.json_reply({"version": "0.5.0", "source": self.repository.source,
                     "team_database_connected": self.repository.team_database_connected, "cloud_deployed": False, "agent_engine_configured": bool(os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE')), "default_engine": default_engine,
                     "mcp_available": importlib.util.find_spec("mcp") is not None, "auto_model_calls": False,
                     "transport": getattr(self.server, "transport", "mcp"), "authentication": "temporary-local",
-<<<<<<< HEAD
                     "vertex": vertex_status(), "llm": llm_status(), "gemini_available": False,
-=======
-                    "vertex": vertex_status(), 'llm':llm, 'alem':alem_status(), "gemini_available": vertex_status()['calls_enabled'] or bool(os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE')),
->>>>>>> 126ecb7 (full rework)
                     "frontend_connected": all((LMS_WEB / name).is_file() for name, _ in FRONTEND_FILES.values()), "openapi": "/api/v1/openapi.json",
                     "notice": "Командная база не подключена. Собственные базы и учебные примеры не используются." if not self.repository.team_database_connected else "Используется адаптер команды."})
             if route == ["openapi.json"] and method == "GET":

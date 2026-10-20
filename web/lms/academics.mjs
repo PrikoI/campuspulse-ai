@@ -6,9 +6,13 @@ export async function assignments(parent,prefix,query,active) {
   if (!active()) return;
   const data=await api(prefix+'assignments'+query);
   if (!active()) return;
+  assignmentCards(parent,data.items,courses);
+}
+
+export function assignmentCards(parent,items,courses) {
   const names=new Map(courses.map(row=>[row.id,row.name]));
   const cards=element('div',undefined,parent);cards.className='assignment-grid';
-  const rows=data.items.filter(row=>courses.some(course=>course.id===row.course_id&&!course.archived)).sort((a,b)=>(a.due||'z').localeCompare(b.due||'z'));
+  const rows=items.filter(row=>courses.some(course=>course.id===row.course_id&&!course.archived)).sort((a,b)=>(a.due||'z').localeCompare(b.due||'z'));
   if (!rows.length) element('p','Заданий пока нет. Преподаватель может связать работы с дедлайнами.',cards);
   for (const task of rows) {
     const card=element('article',undefined,cards);card.className='assignment-card';
@@ -16,7 +20,7 @@ export async function assignments(parent,prefix,query,active) {
     element('h3',task.title,card);
     const due=task.due?new Date(task.due):null;
     element('p',due ? due.toLocaleString('ru-RU',{timeZone:'Asia/Qyzylorda',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}) : 'Дедлайн не указан',card).className='assignment-date';
-    element('span',due&&due<Date.now()?'Срок прошёл':'Предстоит',card).className='assignment-state';
+    element('span',due&&due<Date.now()?'Срок прошёл':due?'Предстоит':'Ожидает даты',card).className='status-badge '+(due&&due<Date.now()?'negative':'neutral');
     if (task.minutes) element('p',`Подготовка: ${task.minutes} мин`,card);
     if (task.description) element('p',task.description,card).className='assignment-description';
   }

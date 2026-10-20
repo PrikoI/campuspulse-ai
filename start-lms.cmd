@@ -1,11 +1,6 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-<<<<<<< HEAD
-if not defined CAMPUSPULSE_LMS_REPOSITORY set CAMPUSPULSE_LMS_REPOSITORY=firestore
-set CAMPUSPULSE_ALLOW_CLOUD=0
-=======
->>>>>>> 126ecb7 (full rework)
 set CAMPUSPULSE_MODE=local
 set CAMPUSPULSE_TRANSPORT=mcp
 set PYTHONUTF8=1

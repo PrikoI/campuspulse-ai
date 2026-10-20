@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {api, readEvents, onUnauthorized, ApiError} from '../web/lms/api.mjs';
 import {safeURL} from '../web/lms/ui.mjs';
 import {bindAgent} from '../web/lms/agent.mjs';
+import {chatDOM} from './chat_dom.mjs';
 
 function stream(text) {
   const bytes = new TextEncoder().encode(text);
@@ -49,22 +50,18 @@ test('Source links reject executable schemes and relative paths', () => {
 });
 
 test('Logout prevents late SSE completion from restoring another session data', async () => {
-  const original = {fetch:globalThis.fetch, document:globalThis.document, FormData:globalThis.FormData};
-  let submit, respond, reviews = 0;
-  const button = {disabled:false}, trace = {textContent:''}, answer = {textContent:''};
-  const form = {addEventListener(name, handler) { submit = handler; }, querySelector() { return button; }};
-  globalThis.document = {querySelector(selector) { return {'#agent':form,'#trace':trace,'#answer':answer}[selector]; }};
-  globalThis.FormData = class { get(name) { return name === 'message' ? 'My tasks' : 'local'; } };
+  const original = globalThis.fetch, dom = chatDOM();
+  let respond, reviews = 0;
   globalThis.fetch = () => new Promise(resolve => { respond = resolve; });
   try {
     const stop = bindAgent(() => ({}), () => reviews++);
-    const pending = submit({preventDefault() {}, currentTarget:form});
+    dom['chat-input'].value='My tasks';
+    const pending = dom.agent.requestSubmit();
     stop();
     respond(stream('data: {"type":"tool_result","result":{"private":"previous-user"}}\n\ndata: {"type":"complete","response":{"answer":"previous-user","results":{"prepare_personal_change":{"proposal":"private"}}}}\n\n'));
     await pending;
-    assert.equal(answer.textContent, '');
-    assert.equal(trace.textContent, '');
+    assert.doesNotMatch(dom['chat-messages'].textContent,/previous-user|private/);
     assert.equal(reviews, 0);
-    assert.equal(button.disabled, false);
-  } finally { Object.assign(globalThis, original); }
+    assert.equal(dom['chat-send'].disabled, false);
+  } finally { dom.restore(); globalThis.fetch=original; }
 });

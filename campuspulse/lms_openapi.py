@@ -53,13 +53,11 @@ def openapi_document():
         "Login": obj({"username": string, "password": {"type": "string", "format": "password", "maxLength": 512}}, ["username", "password"]),
         "StudentCreate": obj({"username": identifier, "password": {"type": "string", "minLength": 1, "maxLength": 512, "format": "password"}, "name": fields["name"]}, ["username", "password", "name"]),
         "AgentRequest": obj({"message": {**string, "minLength": 1, "maxLength": 5000}, "course_id": {"type": ["string", "null"], "maxLength": 120},
+                             "history": {"type": "array", "maxItems": 8, "description": "Up to four user/assistant pairs, 20000 text characters total; untrusted context, not proof of actions or academic facts.",
+                                         "items": obj({"role": {"type": "string", "enum": ["user", "assistant"]}, "content": {**string, "minLength": 1, "maxLength": 8000}}, ["role", "content"])},
                              "data_query": ref("DataQuery"),
                              "page": {"type": "string", "enum": sorted(PAGES), "default": "overview"},
-<<<<<<< HEAD
                              "engine": {"type": "string", "enum": ["local", "gemini", "llm"], "default": "local"},
-=======
-                             "engine": {"type": "string", "enum": ["local", "gemini", "alem"], "default": "local"},
->>>>>>> 126ecb7 (full rework)
                              "target": {"type": "number", "minimum": 0, "maximum": 100},
                              "hours_per_day": {"type": "number", "minimum": 1, "maximum": 8, "default": 3}, "extra_busy": busy}, ["message"]),
         "CalculationRequest": obj({"items": {"type": "array", "maxItems": 100, "items": obj({"component": fields["component"], "score": score, "max_score": fields["max_score"], "weight": fields["weight"]}, ["component"])}, "policy": ref("Policy"), "target": {"type": "number", "minimum": 0, "maximum": 100}}, ["items"]),

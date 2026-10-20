@@ -1,8 +1,10 @@
 import {api} from './api.mjs';
 import {element,showError} from './ui.mjs';
+import {courseCards} from './views.mjs';
 
-export async function courseList(parent, reload, active, updateCourses) {
+export async function courseList(parent, reload, active, updateCourses, open) {
   const form = element('form',undefined,parent);
+  form.className='course-create';
   const name = element('input',undefined,element('label','Название дисциплины',form));
   name.required = true; name.maxLength = 200; name.placeholder = 'Например, Математика';
   const add = element('button','Добавить дисциплину',form);
@@ -24,12 +26,9 @@ export async function courseList(parent, reload, active, updateCourses) {
   updateCourses(data.items);
   const rows = data.items.filter(row => !row.archived);
   if (!rows.length) { element('p','Дисциплин пока нет. Добавьте первую.',parent); return; }
-  const table = element('table',undefined,parent), head = element('tr',undefined,element('thead',undefined,table));
-  ['Дисциплина','Действия'].forEach(title => element('th',title,head));
-  const body = element('tbody',undefined,table);
+  const cards=courseCards(parent,rows,open);
   for (const row of rows) {
-    const tr = element('tr',undefined,body); element('td',row.name,tr);
-    const actions = element('td',undefined,tr);
+    const actions=cards.get(row.id);
     const remove = element('button','Убрать дисциплину',actions); remove.type = 'button';
     remove.addEventListener('click',async () => {
       if (!active() || !window.confirm(`Удалить дисциплину «${row.name}»?`)) return;

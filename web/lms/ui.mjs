@@ -1,24 +1,29 @@
 export function safeURL(value) {
   try { const url = new URL(value); return ['http:','https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
 }
-export const format = value => value === null ? 'Неизвестно' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+export const format = value => value === null || value === undefined ? '—' : typeof value === 'boolean' ? (value?'Да':'Нет') : Array.isArray(value) ? `${value.length} записей` : typeof value === 'object' ? 'Дополнительные сведения' : String(value);
 export function element(tag, text, parent) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (parent) parent.append(node); return node; }
 export function records(parent, rows) {
   if (!rows.length) { element('p','Записей нет.',parent); return; }
-  const keys = [...new Set(rows.flatMap(row => Object.keys(row)))], table = element('table',undefined,parent);
-  const heading = element('tr',undefined,element('thead',undefined,table)); keys.forEach(key => element('th',key,heading));
+  const labels={name:'Название',title:'Название',code:'Код',description:'Описание',due:'Дедлайн',minutes:'Подготовка, минут',week:'Неделя',score:'Балл',max_score:'Максимум',weight:'Вес',component:'Компонент оценки',status:'Статус',comment:'Комментарий',starts_at:'Начало',ends_at:'Окончание',source_url:'Источник',text:'Материал',done:'Завершено',role:'Роль',kind:'Тип',label:'Название',fields:'Доступные поля',filterable:'Фильтры'};
+  const keys = [...new Set(rows.flatMap(row => Object.keys(row)))].filter(key=>key!=='id'&&!key.endsWith('_id')&&!['policy','instructor_ids','archived','source','url','owner_id','record_id'].includes(key)), table = element('table',undefined,parent);
+  const heading = element('tr',undefined,element('thead',undefined,table)); keys.forEach(key => element('th',labels[key]||key.replaceAll('_',' '),heading));
   const body = element('tbody',undefined,table);
   for (const row of rows) {
     const tr = element('tr',undefined,body);
     for (const key of keys) {
       const td = element('td',undefined,tr), value = row[key];
       if (key === 'source_url' && safeURL(value)) { const a = element('a','Источник',td); a.href = safeURL(value); a.target = '_blank'; a.rel = 'noopener noreferrer'; }
-      else element(typeof value === 'object' ? 'pre' : 'span',value === undefined ? '—' : format(value),td);
+      else {
+        const values={present:'Присутствовал',absent:'Отсутствовал',late:'Опоздал',excused:'Уважительная причина',regmid:'Текущие работы · 1-я аттестация',regend:'Текущие работы · 2-я аттестация',midterm:'Midterm',endterm:'Endterm',attestation1:'1-я аттестация',attestation2:'2-я аттестация',final:'Финальный экзамен',student:'Студент',admin:'Преподаватель',lecture:'Лекция',class:'Занятие'};
+        const text=['due','starts_at','ends_at'].includes(key)&&value?new Date(value).toLocaleString('ru-RU',{timeZone:'Asia/Qyzylorda'}):['role','status','component','kind'].includes(key)&&values[value]?values[value]:format(value);
+        element('span',text,td);
+      }
     }
   }
 }
 export function showError(error) {
-  document.querySelector('#error').textContent = error.message + (error.data_access?.length ? '\n' + JSON.stringify(error.data_access,null,2) : '');
+  document.querySelector('#error').textContent = error.message;
 }
 export function studyPlan(parent, plan) {
   element('p',`${plan.scheduled_minutes} минут подготовки · ${plan.blocks.length} блоков · ${plan.risks.length} рисков`,parent).className='schedule-summary';

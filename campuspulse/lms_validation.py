@@ -73,11 +73,28 @@ def tool_arguments(spec, args):
     return clean
 
 
+def conversation_history(value):
+    """Untrusted dialogue text only; never accept system/tool messages or actions."""
+    if not isinstance(value, list) or len(value) > 8 or len(value) % 2:
+        raise LmsError("История чата: максимум 4 пары сообщений.")
+    clean = []
+    for index, item in enumerate(value):
+        expected = "user" if index % 2 == 0 else "assistant"
+        if not isinstance(item, dict) or set(item) != {"role", "content"} or item["role"] != expected:
+            raise LmsError("История чата: разрешены только пары user/assistant с текстом.")
+        clean.append({"role": expected, "content": text(item["content"], "history.content", 8000)})
+    if sum(len(item["content"]) for item in clean) > 20000:
+        raise LmsError("История чата превышает 20000 символов.")
+    return clean
+
+
 def agent_payload(payload):
-    allowed = {"message", "course_id", "page", "engine", "target", "hours_per_day", "extra_busy", "data_query", "personal_change"}
+    allowed = {"message", "course_id", "page", "engine", "target", "hours_per_day", "extra_busy", "data_query", "personal_change", "history"}
     if not isinstance(payload, dict) or set(payload) - allowed:
         raise LmsError("Неизвестные поля запроса. Идентификатор студента берётся из сессии.")
     clean = dict(payload)
+    if "history" in clean:
+        clean["history"] = conversation_history(clean["history"])
     if "personal_change" in clean:
         from .firestore_personal import personal_change
         clean["personal_change"] = personal_change(clean["personal_change"])
@@ -89,13 +106,8 @@ def agent_payload(payload):
         clean["course_id"] = identifier(clean["course_id"])
     if not isinstance(clean.get("page", "overview"), str) or clean.get("page", "overview") not in PAGES:
         raise LmsError("Неизвестная страница LMS.")
-<<<<<<< HEAD
     if not isinstance(clean.get("engine", "local"), str) or clean.get("engine", "local") not in {"local", "gemini", "llm"}:
         raise LmsError("Режим: local, llm или gemini.")
-=======
-    if not isinstance(clean.get("engine", "local"), str) or clean.get("engine", "local") not in {"local", "gemini", "alem"}:
-        raise LmsError("Режим: local, alem или gemini.")
->>>>>>> 126ecb7 (full rework)
     if "target" in clean:
         clean["target"] = float(number(clean["target"], "Целевой итог"))
     clean["hours_per_day"], clean["extra_busy"] = planning_options(clean.get("hours_per_day", 3), clean.get("extra_busy", []))

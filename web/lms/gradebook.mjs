@@ -13,6 +13,7 @@ export async function gradebook(parent, courseId, reload, active) {
   const workOrder = row => row.title === 'Midterm' ? 5 : row.title === 'Endterm' ? 10 : /^Assignment \d+$/.test(row.title) ? Number(row.title.split(' ')[1]) : 1000;
   items.sort((a,b) => workOrder(a) - workOrder(b) || a.title.localeCompare(b.title));
   const form = element('form',undefined,parent);
+  form.className='friendly-form';
   const select = label => element('select',undefined,element('label',label,form));
   const course = select('Предмет'), student = select('Ученик'), item = select('Работа');
   for (const control of [course,student,item]) control.required = true;
@@ -29,7 +30,7 @@ export async function gradebook(parent, courseId, reload, active) {
     item.replaceChildren(new Option('Выберите работу',''),...items.filter(row => row.course_id === course.value).map(row => new Option(`${row.title} (макс. ${row.max_score ?? 100})`,row.id)));
     score.value = ''; comment.value = ''; score.removeAttribute('max');
     save.disabled = !course.value || !ids.size || item.options.length < 2;
-    notice.textContent = !course.value ? 'Выберите предмет для выставления оценки.' : !ids.size ? 'На этот предмет ещё не зачислены ученики.' : item.options.length < 2 ? 'Сначала создайте оцениваемую работу в разделе grade_items.' : 'Повторное сохранение обновит оценку выбранного ученика за эту работу.';
+    notice.textContent = !course.value ? 'Выберите предмет для выставления оценки.' : !ids.size ? 'На этот предмет ещё не зачислены ученики.' : item.options.length < 2 ? 'Сначала добавьте оцениваемую работу в разделе «Работы».' : 'Повторное сохранение обновит оценку выбранного ученика за эту работу.';
     list.replaceChildren();
     const table = element('table',undefined,list), head = element('tr',undefined,element('thead',undefined,table));
     ['Предмет','Ученик','Работа','Балл','Комментарий','Действия'].forEach(title => element('th',title,head));

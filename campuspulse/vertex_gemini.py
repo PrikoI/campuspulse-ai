@@ -47,7 +47,7 @@ def vertex_status():
             "adc_verified": False, "live_verified": False}
 
 
-async def vertex_loop(message, schemas, invoke, config, instruction, report=None, *, before_request=None):
+async def vertex_loop(message, schemas, invoke, config, instruction, report=None, *, before_request=None, history=None):
     config.require_enabled()
     import google.auth
     from google import genai
@@ -59,7 +59,9 @@ async def vertex_loop(message, schemas, invoke, config, instruction, report=None
         raise LmsError("ADC для Vertex AI недоступны. Проверьте серверную identity.", 503) from None
     declarations = [types.FunctionDeclaration(name=spec["name"], description=spec["description"],
                     parameters_json_schema=spec["inputSchema"]) for spec in schemas]
-    contents = [types.Content(role="user", parts=[types.Part.from_text(text=message)])]
+    contents = [types.Content(role="model" if item["role"] == "assistant" else "user",
+                              parts=[types.Part.from_text(text=item["content"])]) for item in history or []]
+    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
     instruction += f"\nТекущее время: {datetime.now(TZ).isoformat()}."
     calls = 0
     try:

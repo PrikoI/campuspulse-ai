@@ -22,7 +22,8 @@ ENDPOINT = "https://llm.alem.ai/v1/chat/completions"
 def env_config():
     """Read only Alem settings. Literal values; no expansion or shell execution."""
     allowed = {"CAMPUSPULSE_LLM_PROVIDER", "CAMPUSPULSE_ALEM_API_KEY",
-               "CAMPUSPULSE_ALEM_MODEL", "CAMPUSPULSE_ALEM_ENABLED"}
+               "CAMPUSPULSE_ALEM_MODEL", "CAMPUSPULSE_ALEM_ENABLED",
+               "OPENAI_API_KEY", "GEMMA_MODEL"}
     try:
         lines = ENV_FILE.read_text(encoding="utf-8-sig").splitlines()
     except FileNotFoundError:
@@ -69,9 +70,17 @@ class AlemConfig:
     def from_environment(cls):
         local = local_config()
         dotenv = env_config()
+        def setting(primary, alias, default):
+            # Explicit Alem settings take priority, including an explicit empty key.
+            for name in (primary, alias):
+                if name in os.environ:
+                    return os.environ[name]
+                if name in dotenv:
+                    return dotenv[name]
+            return default
         enabled = os.getenv("CAMPUSPULSE_ALEM_ENABLED", dotenv.get("CAMPUSPULSE_ALEM_ENABLED"))
-        return cls(os.getenv("CAMPUSPULSE_ALEM_API_KEY", dotenv.get("CAMPUSPULSE_ALEM_API_KEY", local.get("api_key", ""))),
-                   os.getenv("CAMPUSPULSE_ALEM_MODEL", dotenv.get("CAMPUSPULSE_ALEM_MODEL", local.get("model", "gemma4"))),
+        return cls(setting("CAMPUSPULSE_ALEM_API_KEY", "OPENAI_API_KEY", local.get("api_key", "")),
+                   setting("CAMPUSPULSE_ALEM_MODEL", "GEMMA_MODEL", local.get("model", "gemma4")),
                    enabled == "1" if enabled is not None else local.get("enabled") is True)
 
     @property
@@ -110,11 +119,12 @@ def completion(config, messages, tools=None):
         raise LmsError("Alem недоступен или вернул некорректный ответ. Автоповтора нет.", 503) from None
 
 
-async def alem_loop(message, schemas, invoke, config, instruction, report=None, *, before_request=None):
+async def alem_loop(message, schemas, invoke, config, instruction, report=None, *, before_request=None, history=None):
     config.require_enabled()
     tools = [{"type": "function", "function": {"name": spec["name"], "description": spec["description"],
               "parameters": spec["inputSchema"]}} for spec in schemas]
     messages = [{"role": "system", "content": instruction + f"\nТекущее время: {datetime.now(TZ).isoformat()}."},
+                *({"role": item["role"], "content": item["content"]} for item in history or []),
                 {"role": "user", "content": message}]
     allowed = {spec["name"] for spec in schemas}
     calls = 0

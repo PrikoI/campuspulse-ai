@@ -11,7 +11,7 @@ class CampusPulseCloudAgent:
             raise RuntimeError('A shared session signing secret of at least 32 characters is required')
         self._repository = None
 
-    def query(self, session_token: str, message: str, course_id: str = '', page: str = 'overview') -> dict:
+    def query(self, session_token: str, message: str, course_id: str = '', page: str = 'overview', history: list | None = None) -> dict:
         """IAM-protected RPC with application identity verified from a signed token."""
         if not hasattr(self, '_repository'):
             self.set_up()
@@ -19,7 +19,7 @@ class CampusPulseCloudAgent:
             from .lms_repository import open_repository
             self._repository = open_repository()
         from .lms_agent import run_lms_query
-        payload = {'message':message, 'engine':'alem' if os.getenv('CAMPUSPULSE_LLM_PROVIDER')=='alem' else 'gemini', 'page':page}
+        payload = {'message':message, 'engine':'llm', 'page':page, 'history':history if history is not None else []}
         if course_id:
             payload['course_id'] = course_id
         return asyncio.run(asyncio.wait_for(run_lms_query(self._repository,session_token,payload,transport='mcp'),timeout=180))
@@ -43,7 +43,8 @@ async def remote_query(repository, token, payload, emit=None):
         try:
             response = session.post(f'https://{parts[3]}-aiplatform.googleapis.com/v1/{resource}:query',
                 json={'class_method':'query','input':{'session_token':token,'message':clean['message'],
-                      'course_id':clean.get('course_id',''),'page':clean.get('page','overview')}},timeout=190)
+                      'course_id':clean.get('course_id',''),'page':clean.get('page','overview'),
+                      'history':clean.get('history',[])}},timeout=190)
             if not response.ok:
                 raise LmsError(f'Agent Engine: HTTP {response.status_code}. Проверьте IAM и развёртывание.',503)
             result = response.json().get('output')

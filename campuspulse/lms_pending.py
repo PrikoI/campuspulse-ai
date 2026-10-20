@@ -35,12 +35,7 @@ class PendingRepository:
 
     def __init__(self):
         self.secret = os.getenv("CAMPUSPULSE_LMS_SESSION_SECRET") or secrets.token_urlsafe(48)
-<<<<<<< HEAD
         self._credentials = {uid: password_hash(account[0]) for uid, account in DEV_ACCOUNTS.items()}
-=======
-        student_ids = os.getenv('CAMPUSPULSE_DEMO_STUDENTS','student1,student2').split(',')
-        self._credentials = {uid: password_hash(uid) for uid in ['admin', *[uid.strip() for uid in student_ids if uid.strip()]]}
->>>>>>> 126ecb7 (full rework)
         self._revoked = set()
         self._usage = {}
         self._lock = threading.Lock()

@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from campuspulse.alem_llm import AlemConfig, alem_loop
+from campuspulse.config import load_config
 from campuspulse.lms_store import LmsError
 
 
@@ -31,6 +32,7 @@ def main():
     parser.add_argument("--live", action="store_true", help="Allow up to three actual Alem model requests")
     if not parser.parse_args().live:
         parser.error("Pass --live explicitly to call Alem")
+    load_config()
     try:
         print(json.dumps(asyncio.run(check()), ensure_ascii=False))
     except LmsError as error:

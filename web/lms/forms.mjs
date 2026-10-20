@@ -59,20 +59,16 @@ export function gradeForm(parent, courseId, students, items, reload) {
   });
 }
 export function personalForm(parent, prepare) {
-  const form = element('form',undefined,parent);
-  const fields = {};
-  for (const [name,label,type] of [['record_id','ID для изменения (пусто — новая задача)','text'],['title','Название','text'],['due','Дедлайн ISO 8601 с часовым поясом (необязательно)','text'],['minutes','Время, минут','number']]) {
-    const wrapper = element('label',label,form), input = element('input',undefined,wrapper); input.type = type; fields[name] = input;
-  }
-  fields.minutes.min = '10'; fields.minutes.max = '2400'; fields.minutes.value = '60';
-  const done = element('input',undefined,element('label','Завершено',form)); done.type = 'checkbox';
-  element('button','Подготовить изменение',form);
+  const panel=element('details',undefined,parent);panel.className='editor-panel';element('summary','Добавить личную задачу',panel);
+  const form = element('form',undefined,panel);form.className='friendly-form';
+  const title=element('input',undefined,element('label','Название задачи',form));title.required=true;title.maxLength=200;
+  const due=element('input',undefined,element('label','Сделать до · время Кызылорды',form));due.type='datetime-local';
+  const minutes=element('input',undefined,element('label','Время подготовки, минут',form));minutes.type='number';minutes.min=10;minutes.max=2400;minutes.value=60;minutes.required=true;
+  const button=element('button','Подготовить задачу',form);
   form.addEventListener('submit',async event => {
     event.preventDefault();
-    const payload = {done:done.checked};
-    if (fields.title.value) payload.title = fields.title.value;
-    if (fields.due.value) payload.due = fields.due.value;
-    if (fields.minutes.value) payload.minutes = Number(fields.minutes.value);
-    try { await prepare({target:'task',record_id:fields.record_id.value || null,payload}); } catch(error) { showError(error); }
+    if(!form.reportValidity()||button.disabled)return;button.disabled=true;
+    const payload={title:title.value.trim(),minutes:Number(minutes.value),done:false,...(due.value?{due:due.value+':00+05:00'}:{})};
+    try { await prepare({target:'task',record_id:null,payload}); } catch(error) { showError(error); }finally{button.disabled=false;}
   });
 }
