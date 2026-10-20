@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CampusPulse AI — LMS</title><link rel="stylesheet" href="/lms-assets/style.css"><link rel="stylesheet" href="/lms-assets/pages.css"></head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">C</span><strong>CampusPulse <b>AI</b></strong></div>
+  <div class="top-search" aria-hidden="true">⌕ <span>Поиск по курсам и заданиям</span><kbd>⌘ K</kbd></div>
+  <div class="top-actions"><button id="theme" class="icon-button" type="button" title="Сменить тему">◐</button><span id="identity"></span></div>
+</header>
+<p id="status" class="system-status" role="status">Проверка сервера…</p>
+<main class="app-root">
+  <section id="session-panel" class="session-panel" aria-label="Подключение к учебному кабинету">
+    <span id="session-spinner" class="loading-spinner" aria-hidden="true"></span>
+    <p id="session-message" role="status">Открываем ваш учебный кабинет…</p>
+    <button id="session-retry" class="secondary" type="button" hidden>Попробовать снова</button>
+    <noscript>Для работы учебного кабинета включите JavaScript в браузере.</noscript>
+  </section>
+  <section id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <div class="profile-card"><span class="avatar">CP</span><div><strong>CampusPulse LMS</strong><small>Учебный кабинет</small></div></div>
+      <label class="course-picker">Текущая дисциплина<select id="course"><option value="">Все дисциплины</option></select></label>
+      <nav id="navigation" aria-label="Разделы LMS"></nav>
+      <div class="sidebar-note"><strong>Нужна помощь?</strong><span>Откройте AI-помощника справа.</span></div>
+    </aside>
+    <section class="content-panel">
+      <div class="page-heading"><div><span class="eyebrow">CAMPUSPULSE / LMS</span><h1 id="page-title"></h1></div><span class="live-pill">● Данные синхронизированы</span></div>
+      <div id="content"></div>
+    </section>
+    <aside id="agent-panel" class="assistant-panel">
+      <div class="assistant-heading"><span class="assistant-icon" aria-hidden="true">✦</span><div><h2>AI-помощник</h2><small>Ваш учебный чат</small></div><button id="new-chat" class="chat-new secondary" type="button" title="Очистить текущий диалог">Новый чат</button></div>
+      <div id="chat-messages" class="chat-messages" role="log" aria-label="Диалог с AI-помощником" aria-live="polite" aria-relevant="additions text"></div>
+      <form id="agent" class="chat-composer">
+        <label class="chat-input-label" for="chat-input">Сообщение помощнику</label>
+        <textarea id="chat-input" name="message" rows="2" maxlength="5000" placeholder="Спросите об учёбе…" required></textarea>
+        <div class="chat-composer-actions"><label class="chat-engine">Режим<select name="engine" aria-label="Режим помощника"><option value="llm">LLM</option><option value="local">Без AI</option></select></label><button id="chat-stop" class="secondary" type="button" hidden>Остановить</button><button id="chat-send" type="submit" title="Отправить сообщение">Отправить <span aria-hidden="true">↑</span></button></div>
+        <small class="chat-hint">Enter — отправить · Shift+Enter — новая строка</small>
+      </form>
+    </aside>
+    <section id="review" class="review-panel" hidden><h2>Подтвердите изменение</h2><div id="review-data"></div><div class="button-row"><button id="confirm" type="button">Подтвердить</button><button id="cancel" class="secondary" type="button">Отменить</button></div></section>
+  </section>
+  <p id="error" role="alert"></p>
+</main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
