@@ -1,3 +1,6 @@
+import {schedule} from './schedule.mjs';
+import {courseList} from './courses.mjs';
+import {gradebook} from './gradebook.mjs';
 import {api,onUnauthorized} from './api.mjs';
 import {element,records,showError} from './ui.mjs';
 import {collections,adminForm,personalForm} from './forms.mjs';
@@ -13,11 +16,26 @@ const stopAgent = bindAgent(() => ({page:Object.hasOwn(pages,page) && !['persona
 $('#confirm').addEventListener('click',async () => { if (!pendingProposal) return; $('#confirm').disabled = true; try { await api('actions/confirm',{method:'POST',body:{proposal:pendingProposal.proposal,confirmed:true}}); pendingProposal = null; $('#review').hidden = true; await load(); } catch(error) { showError(error); } finally { $('#confirm').disabled = false; } });
 $('#cancel').addEventListener('click',() => { pendingProposal = null; $('#review').hidden = true; });
 async function load() {
-  const version = ++requestVersion, target = $('#content'), cid = $('#course').value;
-  target.replaceChildren(); $('#error').textContent = ''; $('#page-title').textContent = pages[page] || page;
+  const version = ++requestVersion, container = $('#content'), cid = $('#course').value;
+  container.replaceChildren(); $('#error').textContent = ''; $('#page-title').textContent = pages[page] || page;
+  const loading = element('div',undefined,container); loading.className = 'page-loading';
+  loading.setAttribute('role','status'); loading.setAttribute('aria-live','polite');
+  const spinner = element('span',undefined,loading); spinner.className = 'loading-spinner'; spinner.setAttribute('aria-hidden','true');
+  element('span','Загрузка…',loading);
+  const target = element('div',undefined,container); target.hidden = true; target.setAttribute('aria-busy','true');
   const query = cid ? '?course_id=' + encodeURIComponent(cid) : '', prefix = user?.role === 'admin' ? 'admin/' : '';
   try {
-    if (page === 'data') {
+    if (page === 'courses' && user.role === 'admin') {
+      await courseList(target, load, () => version === requestVersion, rows => {
+        const current = $('#course').value;
+        $('#course').replaceChildren(new Option('Все доступные',''), ...rows.filter(row => !row.archived).map(row => new Option(row.name,row.id)));
+        $('#course').value = rows.some(row => row.id === current && !row.archived) ? current : '';
+      });
+    } else if (page === 'grades' && user.role === 'admin') {
+      await gradebook(target, cid, load, () => version === requestVersion);
+    } else if (page === 'schedule') {
+      await schedule(target, prefix, query, () => version === requestVersion);
+    } else if (page === 'data') {
       const data = await api('data/resources'); if (version !== requestVersion) return; records(target,data.resources);
       const form = element('form',undefined,target), input = element('textarea',undefined,element('label','Именованный запрос JSON: resource, filters, fields, limit',form)); input.value = '{}'; element('button','Выполнить запрос',form);
       form.addEventListener('submit',async event => { event.preventDefault(); try { const result = await api('data/query',{method:'POST',body:JSON.parse(input.value)}); if (version === requestVersion) { const out = element('section',undefined,target); records(out,result.items); if (result.next_cursor) element('p','Есть следующая страница. Передайте в cursor: ' + result.next_cursor,out); } } catch(error) { showError(error); } });
@@ -39,6 +57,10 @@ async function load() {
       if (kind === 'courses') { const current = $('#course').value; $('#course').replaceChildren(new Option('Все доступные',''),...data.items.filter(row => !row.archived).map(row => new Option(row.name,row.id))); $('#course').value = current; }
     }
   } catch(error) { if (version === requestVersion) showError(error); }
+  finally {
+    loading.remove();
+    if (version === requestVersion) { target.hidden = false; target.removeAttribute('aria-busy'); }
+  }
 }
 function signedIn(actor) {
   user = actor; $('#login-panel').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; $('#identity').textContent = `${actor.name} (${actor.role})`; $('#agent-panel').hidden = actor.role !== 'student';

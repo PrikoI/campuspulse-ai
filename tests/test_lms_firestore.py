@@ -196,6 +196,42 @@ class InitializationTests(unittest.TestCase):
 
 
 class RepositoryTests(unittest.TestCase):
+    def test_course_name_only_and_safe_removal(self):
+        storage = seeded_storage()
+        repo = FirestoreRepository(storage, CONFIG)
+        course = repo.save('courses', ADMIN, {'name': 'Математика'})
+        self.assertEqual(course['name'], 'Математика')
+        self.assertTrue(course['code'])
+        works = repo.list('grade_items', ADMIN, course['id'])
+        self.assertEqual(len(works), 10)
+        self.assertEqual(repo.ensure_default_grade_items(ADMIN, course['id']), 0)
+        for work in works:
+            del storage.data['grade_items/' + work['id']]
+        self.assertIn(course['id'], [row['id'] for row in repo.list('courses', ADMIN)])
+        with self.assertRaises(LmsError):
+            repo.delete_course(Principal('teacher2', 'admin', 'Other'), course['id'])
+        with self.assertRaises(LmsError):
+            repo.delete_course(STUDENT, course['id'])
+        self.assertTrue(repo.delete_course(ADMIN, course['id'])['deleted'])
+        self.assertNotIn('courses/' + course['id'], storage.data)
+        with self.assertRaises(LmsError) as error:
+            repo.delete_course(ADMIN, 'course')
+        self.assertEqual(error.exception.status, 409)
+        self.assertIn('courses/course', storage.data)
+
+    def test_delete_grade_checks_role_and_course_owner(self):
+        storage = seeded_storage()
+        repo = FirestoreRepository(storage, CONFIG)
+        for actor in [STUDENT, Principal('teacher2', 'admin', 'Other teacher')]:
+            with self.assertRaises(LmsError):
+                repo.delete_grade(actor, 'g1')
+            self.assertIn('grades/g1', storage.data)
+        self.assertTrue(repo.delete_grade(ADMIN, 'g1')['deleted'])
+        self.assertNotIn('grades/g1', storage.data)
+        self.assertIn('grades/g2', storage.data)
+        with self.assertRaises(LmsError):
+            repo.delete_grade(ADMIN, 'g1')
+
     def setUp(self):
         self.storage = seeded_storage()
         self.repo = FirestoreRepository(self.storage, CONFIG)

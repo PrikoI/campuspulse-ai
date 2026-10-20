@@ -33,6 +33,7 @@ FRONTEND_FILES = {
     **{f"/lms-assets/{name}": (name, mime) for name, mime in {
         "style.css": "text/css", "app.mjs": "text/javascript", "api.mjs": "text/javascript",
         "ui.mjs": "text/javascript", "forms.mjs": "text/javascript", "agent.mjs": "text/javascript",
+        "gradebook.mjs": "text/javascript", "courses.mjs": "text/javascript", "schedule.mjs": "text/javascript",
     }.items()},
 }
 
@@ -129,7 +130,7 @@ class LmsHandler(Handler):
             if len(route) == 1 and route[0] in KINDS:
                 supported = {"GET"}
             if len(route) in {2, 3} and route[0] == "admin" and route[1] in KINDS:
-                supported = {"GET", "POST"} if len(route) == 2 else {"PATCH"}
+                supported = {"GET", "POST"} if len(route) == 2 else ({"PATCH", "DELETE"} if route[1] in {"grades", "courses"} else {"PATCH"})
             if supported is None:
                 raise LmsError("Endpoint не найден.", 404)
             if method not in supported:
@@ -227,6 +228,11 @@ class LmsHandler(Handler):
                 if (method == "POST" and len(route) == 2) or (method == "PATCH" and len(route) == 3):
                     result = self.repository.save(kind, actor, payload, unquote(route[2]) if len(route) == 3 else None)
                     return self.json_reply({"item": result, "source": self.repository.source}, 201 if method == "POST" else 200)
+                if method == "DELETE" and kind in {"grades", "courses"} and len(route) == 3:
+                    remove = getattr(self.repository, "delete_grade" if kind == "grades" else "delete_course", None)
+                    if remove is None:
+                        raise LmsError("Удаление оценок доступно с Firestore.", 503)
+                    return self.json_reply(remove(actor, unquote(route[2])))
                 raise LmsError("Метод не поддерживается.", 405)
             if actor.role != "student":
                 raise LmsError("Студенческий endpoint: войди как студент.", 403)

@@ -31,6 +31,13 @@ NATURAL_KEYS = {"enrollments": ("course_id", "student_id"),
                 "grades": ("student_id", "item_id"), "attendance": ("student_id", "lesson_id")}
 
 
+def default_grade_items(course_id):
+    return [{"course_id": course_id,
+             "title": "Midterm" if i == 5 else "Endterm" if i == 10 else f"Assignment {i}",
+             "component": "midterm" if i == 5 else "endterm" if i == 10 else "regmid" if i < 5 else "regend",
+             "max_score": 100, "weight": 1, "week": None} for i in range(1, 11)]
+
+
 def compound_id(*values):
     return hashlib.sha256(json.dumps(values, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
@@ -325,6 +332,8 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
 
     def save(self, kind, actor, payload, record_id=None):
         self.require_admin(actor)
+        if kind == "courses" and record_id is None and isinstance(payload, dict) and set(payload) == {"name"}:
+            payload = {**payload, "code": "SUB-" + uuid.uuid4().hex[:10]}
         clean = record_payload(kind, payload, record_id)
         keys = NATURAL_KEYS.get(kind, ())
         key = record_id or (compound_id(*(clean[field] for field in keys)) if keys else uuid.uuid4().hex)
@@ -380,11 +389,64 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
             data = stored_record(kind, {field: value for field, value in normalized.items() if field != "id"})
             if kind == "courses":
                 data["owner_id"] = actor.user_id
+            if kind == "courses" and current is None:
+                for index, work in enumerate(default_grade_items(key), 1):
+                    self.storage.put(tx, f"grade_items/{compound_id(key, 'default-work-' + str(index))}", stored_record("grade_items", work))
             if current != data:
                 self.storage.put(tx, path, data)
             return normalized
 
         return self._run(actor, kind, "update" if record_id else "create", write)
+
+    def ensure_default_grade_items(self, actor, course_id):
+        self.require_admin(actor)
+        key = identifier(course_id)
+        def ensure(tx):
+            course = self.storage.get(f"courses/{key}", tx)
+            if course is None or course.get('owner_id') != actor.user_id:
+                raise LmsError("Нет прав на изменение дисциплины.", 403)
+            existing = self._scan('grade_items', [('course_id', '==', key)], tx)
+            titles = {row.get('title') for _, row in existing}
+            missing = [(index, work) for index, work in enumerate(default_grade_items(key), 1) if work['title'] not in titles]
+            # Read every destination before writing, as required by Firestore transactions.
+            destinations = [(f"grade_items/{compound_id(key, 'default-work-' + str(index))}", work) for index, work in missing]
+            for path, _ in destinations:
+                if self.storage.get(path, tx) is not None:
+                    raise LmsError("ID стандартной работы уже занят.", 409)
+            for path, work in destinations:
+                self.storage.put(tx, path, stored_record('grade_items', work))
+            return len(destinations)
+        return self._run(actor, 'grade_items', 'create', ensure)
+
+    def delete_course(self, actor, record_id):
+        self.require_admin(actor)
+        key = identifier(record_id, "record_id")
+        def remove(tx):
+            course = self.storage.get(f"courses/{key}", tx)
+            if course is None:
+                raise LmsError("?????????? ?? ???????.", 404)
+            if course.get("owner_id") != actor.user_id:
+                raise LmsError("??? ???? ?? ???????? ??????????.", 403)
+            for kind in sorted(KINDS - {"courses"}):
+                if self.storage.scan(kind, [("course_id", "==", key)], tx, limit=1):
+                    raise LmsError("?????????? ???????? ????????? ?????? (????????, ?????? ??? ??????). ??????? ??????? ????? ??? ??????????? ??????????.", 409)
+            self.storage.delete(tx, f"courses/{key}")
+            return {"deleted": True, "id": key}
+        return self._run(actor, "courses", "delete", remove)
+
+    def delete_grade(self, actor, record_id):
+        self.require_admin(actor)
+        path = f"grades/{identifier(record_id, 'record_id')}"
+        def remove(tx):
+            row = self.storage.get(path, tx)
+            if row is None:
+                raise LmsError("?????? ?? ???????.", 404)
+            course = self.storage.get(f"courses/{row['course_id']}", tx)
+            if course is None or course.get("owner_id") != actor.user_id:
+                raise LmsError("??? ???? ?? ????????? ?????.", 403)
+            self.storage.delete(tx, path)
+            return {"deleted": True, "id": record_id}
+        return self._run(actor, "grades", "delete", remove)
 
     def login(self, username, password):
         token, actor = super().login(username, password)

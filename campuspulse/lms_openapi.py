@@ -112,6 +112,8 @@ def openapi_document():
         endpoint(f"/api/v1/admin/{kind}", "get", "Teacher: read " + kind, query=["course_id"], database=True)
         endpoint(f"/api/v1/admin/{kind}", "post", "Teacher: create " + kind, kind + "Create", status="201", database=True)
         endpoint(f"/api/v1/admin/{kind}/{{id}}", "patch", "Teacher: update " + kind, kind + "Update", database=True)
+    endpoint("/api/v1/admin/grades/{id}", "delete", "Teacher: delete grade in owned course", database=True)
+    endpoint("/api/v1/admin/courses/{id}", "delete", "Teacher: delete owned course without related records", database=True)
     endpoint("/api/v1/admin/users", "get", "Teacher: list users", database=True)
     endpoint("/api/v1/admin/students", "post", "Teacher: create student", "StudentCreate", status="201", database=True)
     endpoint("/api/v1/grade-summary", "get", "Student: grade calculation from LMS", query=["course_id", "target"], database=True)
