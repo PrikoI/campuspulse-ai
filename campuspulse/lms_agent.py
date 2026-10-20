@@ -5,11 +5,14 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from .agent import ROOT, gemini_loop
+from .vertex_gemini import VertexConfig, vertex_loop
 from .lms_store import LmsError
 from .lms_tools import LMS_SCHEMAS, LmsTools
 from .lms_validation import agent_payload, tool_arguments
+
+ROOT = Path(__file__).resolve().parent.parent
 
 SYSTEM = """Ты CampusPulse, помощник студенту в LMS. Отвечай кратко по-русски.
 Для каталога всей доступной базы и произвольных данных команды сначала вызови
@@ -82,7 +85,7 @@ async def lms_tool_session(repository, actor, token, transport="mcp", report=Non
             yield call
 
 
-async def run_lms_query(repository, token, payload, connection=None, emit=None, transport="mcp"):
+async def run_lms_query(repository, token, payload, emit=None, transport="mcp"):
     actor = repository.principal(token)
     if actor.role != "student":
         raise LmsError("Используй студенческую сессию для помощника.", 403)
@@ -97,9 +100,8 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
     if engine == "gemini":
         if not repository.team_database_connected:
             raise LmsError("Командная база ещё не подключена. Gemini не вызывается, чтобы не расходовать квоту на отсутствующие данные. Для отладки используй local.", 503)
-        if connection is None:
-            raise LmsError("Gemini ещё не подключён к LMS. Интеграция провайдера требует отдельной настройки; local доступен.", 503)
-        repository.reserve_model_query(actor, maximum=10)
+        config = VertexConfig.from_environment()
+        config.require_enabled()
     trace, results = [], {}
     def report(event):
         trace.append(event)
@@ -131,10 +133,18 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 report({"type": "tool_result", "tool": name, "status": "error", "error": result["error"]})
                 return result
         if engine == "gemini":
-            config = {"mode": "developer", "connection": connection, "model": connection.model,
-                      "max_rounds": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
-                      "system_instruction": SYSTEM + f"\nОткрытая страница: {str(payload.get('page', 'overview'))[:100]}. Предмет: {cid or 'не выбран'}."}
-            answer = await gemini_loop(message, {"repository": "", "notes": []}, LMS_SCHEMAS, invoke, config)
+            reserved = False
+            def authorize_model_request():
+                nonlocal reserved
+                repository.principal(token)
+                if not repository.team_database_connected:
+                    raise LmsError("Соединение с базой недоступно; следующий модельный шаг отменён.", 503)
+                if not reserved:
+                    repository.reserve_model_query(actor, maximum=10)
+                    reserved = True
+            answer = await vertex_loop(message, LMS_SCHEMAS, invoke, config,
+                SYSTEM + f"\nОткрытая страница: {payload.get('page', 'overview')}. Предмет: {cid or 'не выбран'}.",
+                report, before_request=authorize_model_request)
         elif "data_query" in payload:
             data = await invoke("query_data", payload["data_query"])
             answer = data["error"] if data.get("error") else f"Ресурс {data['resource']}: получено записей {len(data['items'])}. Источник: {data['source']}."
@@ -184,6 +194,8 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 answer = data["error"] if data.get("error") else f"Из LMS получено заданий: {len(data.get('assignments', []))}. Можно проверить оценки, посещаемость, материалы или рассчитать план."
     return {"answer": answer, "engine": engine, "reasoning_loop": engine == "gemini", "trace": trace,
             "transport": transport, "model_called": engine == "gemini",
+            "provider": "vertex-ai" if engine == "gemini" else "local",
+            "model": config.model if engine == "gemini" else None,
             "results": results, "source": repository.source, "team_database_connected": repository.team_database_connected,
             "budget": {"max_model_steps": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
                        "model_queries_per_day": 10, "cloud_resources_created": False},

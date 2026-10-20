@@ -108,8 +108,8 @@ def openapi_document():
     endpoint("/api/v1/grade-summary", "get", "Student: grade calculation from LMS", query=["course_id", "target"], database=True)
     endpoint("/api/v1/attendance-summary", "get", "Student: marked and unmarked attendance", query=["course_id"], database=True)
     endpoint("/api/v1/grading/calculate", "post", "Arithmetic simulation of explicit input; no database", "CalculationRequest")
-    endpoint("/api/v1/agent/query", "post", "Student: local MCP agent; Gemini blocked while pending", "AgentRequest")
+    endpoint("/api/v1/agent/query", "post", "Student: local MCP or Vertex AI via ADC; model blocked while pending/disabled", "AgentRequest")
     endpoint("/api/v1/agent/stream", "post", "Student: agent action journal over POST SSE", "AgentRequest", stream=True)
-    return {"openapi": "3.1.0", "info": {"title": "CampusPulse LMS local API", "version": "0.4.0"},
+    return {"openapi": "3.1.0", "info": {"title": "CampusPulse LMS local API", "version": "0.5.0"},
             "servers": [{"url": "/"}], "paths": paths,
             "components": {"securitySchemes": {"localSession": {"type": "apiKey", "in": "cookie", "name": "campuspulse_lms"}}, "schemas": schemas}}

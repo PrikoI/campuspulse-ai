@@ -212,7 +212,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gemini_is_blocked_while_database_is_pending(self):
         with patch("google.genai.Client") as model, self.assertRaises(LmsError) as caught:
-            await run_lms_query(self.repo, self.token, {"message": "test", "engine": "gemini"}, connection=object())
+            await run_lms_query(self.repo, self.token, {"message": "test", "engine": "gemini"})
         model.assert_not_called()
         self.assertEqual(caught.exception.status, 503)
         self.assertEqual(self.repo._usage, {})
@@ -315,12 +315,34 @@ class HttpTests(unittest.TestCase):
         self.assertIn("HttpOnly", result["cookie"])
         return result["cookie"].split(";",1)[0]
 
-    def test_status_root_no_legacy_bypass_or_static_frontend(self):
-        self.assertFalse(self.request("GET", "/")["json"]["frontend_connected"])
+    def test_team_frontend_is_same_origin_without_legacy_bypass(self):
+        for path in ["/", "/lms", "/lms/"]:
+            response = self.request("GET", path)
+            self.assertEqual(response["status"], 200)
+            self.assertIn("text/html", response["type"])
+            self.assertIn('/lms-assets/app.mjs', response["body"])
+            self.assertNotIn("fonts.googleapis.com", response["body"])
+        self.assertTrue(self.request("GET", "/api/v1/status")["json"]["frontend_connected"])
         self.assertEqual(self.request("GET", "/api/v1/status")["json"]["source"], "not-connected")
         self.assertEqual(self.request("POST", "/api/query", {"message": "test"})["status"], 404)
         self.assertEqual(self.request("GET", "/app.js")["status"], 404)
         self.assertEqual(self.request("POST", "/api/gemini/connect", {"api_key": "fake"})["status"], 404)
+
+    def test_static_allowlist_blocks_project_files_and_keeps_host_checks(self):
+        from campuspulse.lms_server import FRONTEND_FILES
+        for path in FRONTEND_FILES:
+            response = self.request("GET", path)
+            self.assertEqual(response["status"], 200, path)
+        for path in ["/lms-assets/../.env", "/lms-assets/%2e%2e/README.md", "/lms-assets/..%5c.env", "/.env", "/campuspulse/team_gateway.py", "/frontend-draft/web/index.html", "/frontend-team-source/app.js", "/lms-assets/missing.mjs"]:
+            self.assertEqual(self.request("GET", path)["status"], 404, path)
+        self.assertEqual(self.request("GET", "/lms-assets/app.mjs", headers={"Host": "evil.example"})["status"], 403)
+        conn = http.client.HTTPConnection("127.0.0.1", self.port)
+        conn.request("GET", "/")
+        response = conn.getresponse()
+        self.assertIn("script-src 'self'", response.getheader("Content-Security-Policy"))
+        self.assertNotIn("unsafe-inline", response.getheader("Content-Security-Policy"))
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+        response.read(); conn.close()
 
     def test_student_cannot_write_or_choose_another_identity(self):
         cookie = self.login()
@@ -436,5 +458,17 @@ class HttpTests(unittest.TestCase):
         for kind in KINDS:
             self.assertIn("patch", result["json"]["paths"][f"/api/v1/admin/{kind}/{{id}}"])
         self.assertEqual(result["json"], openapi_document())
+
+    def test_vertex_status_checks_configuration_without_adc_or_model(self):
+        env = {"GOOGLE_CLOUD_PROJECT": "unit-test-project", "GOOGLE_CLOUD_LOCATION": "global",
+               "CAMPUSPULSE_VERTEX_MODEL": "gemini-test-model", "CAMPUSPULSE_ALLOW_CLOUD": "1"}
+        with patch.dict(os.environ, env), patch("google.auth.default") as adc, patch("google.genai.Client") as client:
+            result = self.request("GET", "/api/v1/status")
+        self.assertTrue(result["json"]["vertex"]["configured"])
+        self.assertFalse(result["json"]["vertex"]["adc_verified"])
+        self.assertFalse(result["json"]["vertex"]["live_verified"])
+        self.assertFalse(result["json"]["team_database_connected"])
+        adc.assert_not_called()
+        client.assert_not_called()
 
 
