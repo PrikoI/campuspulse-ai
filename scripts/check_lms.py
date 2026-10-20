@@ -19,7 +19,7 @@ def deny_external_connections(event, args):
 
 
 def main():
-    os.environ.update(CAMPUSPULSE_LMS_REPOSITORY="pending", CAMPUSPULSE_ALLOW_CLOUD="0",
+    os.environ.update(CAMPUSPULSE_LMS_REPOSITORY="pending", CAMPUSPULSE_ALLOW_CLOUD="0", CAMPUSPULSE_LLM_PROVIDER="vertex", CAMPUSPULSE_ALEM_ENABLED="0",
                       CAMPUSPULSE_MODE="local", CAMPUSPULSE_TRANSPORT="mcp", CAMPUSPULSE_TEAM_GATEWAY="")
     # Applies to this test process. MCP children only import the pending adapter;
     # no credentials are forwarded to the child by lms_tool_session.

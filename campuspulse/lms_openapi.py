@@ -28,6 +28,7 @@ def openapi_document():
         "description": {**string, "maxLength": 10000}, "text": {**string, "minLength": 1, "maxLength": 50000},
         "comment": {**string, "maxLength": 2000}, "kind": {**string, "minLength": 1, "maxLength": 200},
         "archived": {"type": "boolean"}, "component": {"type": "string", "enum": sorted(COMPONENTS)},
+        "instructor_ids": {"type": "array", "maxItems": 20, "uniqueItems": True, "items": identifier},
         "status": {"type": "string", "enum": ["present", "absent", "late", "excused"]},
         "due": {"type": ["string", "null"], "format": "date-time"}, "starts_at": stamp, "ends_at": stamp,
         "week": {"type": ["integer", "null"], "minimum": 1, "maximum": 100},
@@ -54,7 +55,7 @@ def openapi_document():
         "AgentRequest": obj({"message": {**string, "minLength": 1, "maxLength": 5000}, "course_id": {"type": ["string", "null"], "maxLength": 120},
                              "data_query": ref("DataQuery"),
                              "page": {"type": "string", "enum": sorted(PAGES), "default": "overview"},
-                             "engine": {"type": "string", "enum": ["local", "gemini"], "default": "local"},
+                             "engine": {"type": "string", "enum": ["local", "gemini", "llm"], "default": "local"},
                              "target": {"type": "number", "minimum": 0, "maximum": 100},
                              "hours_per_day": {"type": "number", "minimum": 1, "maximum": 8, "default": 3}, "extra_busy": busy}, ["message"]),
         "CalculationRequest": obj({"items": {"type": "array", "maxItems": 100, "items": obj({"component": fields["component"], "score": score, "max_score": fields["max_score"], "weight": fields["weight"]}, ["component"])}, "policy": ref("Policy"), "target": {"type": "number", "minimum": 0, "maximum": 100}}, ["items"]),
@@ -119,7 +120,7 @@ def openapi_document():
     endpoint("/api/v1/grade-summary", "get", "Student: grade calculation from LMS", query=["course_id", "target"], database=True)
     endpoint("/api/v1/attendance-summary", "get", "Student: marked and unmarked attendance", query=["course_id"], database=True)
     endpoint("/api/v1/grading/calculate", "post", "Arithmetic simulation of explicit input; no database", "CalculationRequest")
-    endpoint("/api/v1/agent/query", "post", "Student: local MCP or Vertex AI via ADC; model blocked while pending/disabled", "AgentRequest")
+    endpoint("/api/v1/agent/query", "post", "Student: local MCP or server-selected Alem/Vertex LLM; model blocked while pending/disabled", "AgentRequest")
     endpoint("/api/v1/agent/stream", "post", "Student: agent action journal over POST SSE", "AgentRequest", stream=True)
     return {"openapi": "3.1.0", "info": {"title": "CampusPulse LMS local API", "version": "0.5.0"},
             "servers": [{"url": "/"}], "paths": paths,

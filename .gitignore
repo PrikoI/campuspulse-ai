@@ -10,3 +10,9 @@ deployment.json
 firebase-key.json
 **/firebase-key*.json
 **/*service-account*.json
+
+/backups/
+/.codex/
+/.idea/
+/.env
+/firebase-key.json
