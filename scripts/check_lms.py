@@ -1,6 +1,7 @@
 """Offline LMS checks: loopback HTTP and local stdio MCP only.
 
-No database fixtures, real API keys, model requests or cloud resource operations.
+Firestore tests use an injected in-memory double and mocked SDK transport.
+No real API keys, model requests or cloud resource operations.
 Legacy demo suites are deliberately excluded.
 """
 import os

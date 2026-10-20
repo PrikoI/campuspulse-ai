@@ -14,6 +14,9 @@ def open_repository(path=None, seed_demo=False, bootstrap=True):
     if seed_demo:
         raise LmsError("Заполнение учебной базы отключено по запросу команды.")
     name = os.getenv("CAMPUSPULSE_LMS_REPOSITORY", "pending")
+    if name == "firestore":
+        from .firestore_repository import FirestoreRepository
+        return FirestoreRepository()
     if name == "team":
         from .lms_team_adapter import TeamRepository
         return TeamRepository()

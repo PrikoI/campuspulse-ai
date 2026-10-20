@@ -65,7 +65,13 @@ def openapi_document():
         "Error": {"type": "object", "required": ["error"], "properties": {"error": string, "data_access": {"type": "array", "items": ref("DatabaseAccess")}}},
         "Empty": obj(),
         "DataQuery": obj(deepcopy(QUERY_PROPERTIES), ["resource"]),
+        "PersonalChange": obj({"target": {"type": "string", "enum": ["task", "preferences"]},
+                               "operation": {"type": "string", "enum": ["save", "delete"], "default": "save"},
+                               "record_id": {"type": ["string", "null"], "maxLength": 120},
+                               "payload": {"type": "object", "description": "Task: title, course, due, minutes, done; preferences: hours_per_day. See docs/FIRESTORE.md."}}, ["target", "payload"]),
+        "ActionConfirmation": obj({"proposal": {"type": "string", "maxLength": 10000}, "confirmed": {"const": True}}, ["proposal", "confirmed"]),
     }
+    schemas["AgentRequest"]["properties"]["personal_change"] = ref("PersonalChange")
     for kind in sorted(KINDS):
         properties = {key: deepcopy(fields[key]) for key in sorted(FIELDS[kind])}
         schemas[kind + "Create"] = obj(properties, sorted(REQUIRED[kind]))
@@ -89,7 +95,7 @@ def openapi_document():
         if body:
             operation["requestBody"] = {"required": True, "content": {"application/json": {"schema": ref(body)}}}
         if database:
-            operation["description"] = "Pending adapter: returns HTTP 503 and attempted access metadata; no academic records are returned or stored."
+            operation["description"] = "Uses the configured repository with server-side permissions. Pending returns HTTP 503; firestore stores persistent data."
         paths.setdefault(path, {})[method] = operation
     endpoint("/api/v1/status", "get", "Local readiness and integration status", public=True)
     endpoint("/api/v1/openapi.json", "get", "This API contract", public=True)
@@ -98,6 +104,9 @@ def openapi_document():
     endpoint("/api/v1/me", "get", "Current authenticated identity")
     endpoint("/api/v1/data/resources", "get", "Discover all permitted database resources and their fields", database=True)
     endpoint("/api/v1/data/query", "post", "Read any catalog resource through the team's gateway", "DataQuery", database=True)
+    endpoint("/api/v1/personal", "get", "Student: saved personal tasks and allowed preferences", database=True)
+    endpoint("/api/v1/actions/prepare", "post", "Student: prepare a signed change for review; no writes", "PersonalChange", database=True)
+    endpoint("/api/v1/actions/confirm", "post", "Student: explicitly confirm the reviewed change; unavailable to LLM tools", "ActionConfirmation", database=True)
     for kind in sorted(KINDS):
         endpoint(f"/api/v1/{kind}", "get", "Student: enrollment-scoped " + kind, query=["course_id"], database=True)
         endpoint(f"/api/v1/admin/{kind}", "get", "Teacher: read " + kind, query=["course_id"], database=True)

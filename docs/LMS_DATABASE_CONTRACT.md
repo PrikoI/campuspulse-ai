@@ -1,5 +1,10 @@
 # Переходник базы команды → CampusPulse LMS
 
+Реализация Firestore доступна через `CAMPUSPULSE_LMS_REPOSITORY=firestore`:
+[архитектура и запуск](FIRESTORE.md). Контракт ниже сохранён для совместимости.
+Описание неподключённого шаблона относится к режиму `team`; Firestore реализует
+чтение/учебные записи с проверкой владельца и отдельные личные изменения.
+
 **Для разработчика базы:** [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md) и
 [`campuspulse/team_gateway.py`](../campuspulse/team_gateway.py). Универсальный шлюз
 объявляет любые разрешённые ресурсы базы через describe и читает их через query.
@@ -183,8 +188,8 @@ rows — число возвращённых записей. Это число �
 Фабрика `lms_repository.open_repository()` уже знает имя `team`; менять сервер,
 агента и MCP для выбора этого адаптера не нужно. Параметры `path` и `seed_demo`
 запрещены; аргумент bootstrap сохранён для совместимости и не разрешает создавать
-данные. `start-lms.cmd` намеренно фиксирует pending, поэтому для интеграции
-использовать явный запуск:
+данные. `start-lms.cmd` использует pending по умолчанию и сохраняет выбранный
+repository; также можно использовать явный запуск:
 
 ```powershell
 $env:CAMPUSPULSE_LMS_REPOSITORY = 'team'

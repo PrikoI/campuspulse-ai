@@ -6,6 +6,7 @@ from .grading import evaluate_grades
 from .lms_store import LmsError
 from .lms_validation import tool_arguments
 from .lms_data import QUERY_PROPERTIES
+from .lms_json import json_result, tool_error
 from .tools import ToolRegistry
 
 def schema(name, description, properties=None, required=None):
@@ -26,6 +27,19 @@ LMS_SCHEMAS = [
             "extra_busy": {"type": "array", "maxItems": 100, "items": {"type": "object", "properties": {"start": {"type": "string"}, "end": {"type": "string"}}, "required": ["start", "end"], "additionalProperties": False}}}),
 ]
 
+PERSONAL_SCHEMAS = [
+    schema("get_personal_data", "Read the authenticated student's saved personal tasks and allowed study preferences."),
+    schema("prepare_personal_change", "Prepare a personal task or preference change for user review. This writes nothing. Show the exact proposal to the user; confirmation is only through the authenticated HTTP API, never through an LLM tool.",
+           {"target": {"type": "string", "enum": ["task", "preferences"]},
+            "operation": {"type": "string", "enum": ["save", "delete"]},
+            "record_id": {"type": ["string", "null"], "maxLength": 120},
+            "payload": {"type": "object"}}, ["target", "payload"]),
+]
+
+
+def schemas_for(repository):
+    return LMS_SCHEMAS + (PERSONAL_SCHEMAS if callable(getattr(repository, "personal_data", None)) else [])
+
 
 class LmsTools:
     def __init__(self, repository, actor):
@@ -35,26 +49,38 @@ class LmsTools:
 
     def call(self, name, args=None):
         try:
-            return self.execute(name, args)
+            spec = next((item for item in schemas_for(self.repository) if item["name"] == name), None)
+            if spec is None:
+                raise LmsError("Неизвестный инструмент или некорректные аргументы.")
+            args = tool_arguments(spec, args)
+            if name != "list_data_resources" and callable(getattr(self.repository, "read_tool", None)):
+                return json_result(self.repository.read_tool(self.actor, name, lambda: self.execute(name, args)))
+            return json_result(self.execute(name, args))
         except LmsError as error:
             if error.status != 503:
                 raise
-            return {"error": str(error), "status": 503, "data_access": getattr(error, "data_access", []),
+            return {**tool_error(error), "data_access": getattr(error, "data_access", []),
                     "source": self.repository.source, "team_database_connected": False}
 
     def execute(self, name, args=None):
-        spec = next((item for item in LMS_SCHEMAS if item["name"] == name), None)
+        spec = next((item for item in schemas_for(self.repository) if item["name"] == name), None)
         if not spec:
             raise LmsError("Неизвестный инструмент или некорректные аргументы.")
         args = tool_arguments(spec, args)
+        if name == "get_personal_data":
+            return self.repository.personal_data(self.actor)
+        if name == "prepare_personal_change":
+            return self.repository.prepare_personal_change(self.actor, args)
         if name == "list_data_resources":
             return self.repository.data_resources(self.actor)
         if name == "query_data":
             return self.repository.query_data(self.actor, args)
         cid = args.get("course_id")
         audit = []
-        def read(kind):
+        def read(kind, fields=None):
             try:
+                if fields and callable(getattr(self.repository, "list_fields", None)):
+                    return self.repository.list_fields(kind, self.actor, fields, cid, audit)
                 return self.repository.list(kind, self.actor, cid, audit)
             except LmsError as error:
                 error.data_access = list(audit) or getattr(error, "data_access", [])
@@ -63,6 +89,10 @@ class LmsTools:
             result = {"courses": read("courses"), "enrollments": read("enrollments")}
         elif name == "get_assignments":
             result = {"assignments": read("assignments")}
+            if callable(getattr(self.repository, "personal_data", None)):
+                personal = self.repository.personal_data(self.actor)
+                result["personal_tasks"] = personal["tasks"]
+                audit.extend(personal["data_access"])
         elif name == "get_grades":
             courses = read("courses")
             if not courses:
@@ -92,7 +122,10 @@ class LmsTools:
                     matches.append({**match, "material_id": material["id"], "source_url": material.get("source_url", "")})
             result = {"matches": sorted(matches, key=lambda item: item["score"], reverse=True)[:5], "method": "lexical"}
         else:
-            assignments, lessons, courses, enrollments = read("assignments"), read("lessons"), read("courses"), read("enrollments")
+            assignments = read("assignments", ["id", "course_id", "title", "due", "minutes"])
+            lessons = read("lessons", ["course_id", "starts_at", "ends_at"])
+            courses = read("courses", ["id", "name", "archived"])
+            enrollments = read("enrollments", ["course_id", "archived"])
             active = {row["course_id"] for row in enrollments if not row["archived"]}
             course_names = {row["id"]: row["name"] for row in courses if not row["archived"] and row["id"] in active}
             unknown_effort = [item["id"] for item in assignments if item["course_id"] in course_names and item.get("minutes") is None]
@@ -101,6 +134,11 @@ class LmsTools:
             extra = args.get("extra_busy", [])
             if not isinstance(extra, list) or len(extra) > 100:
                 raise LmsError("Допускается до 100 дополнительных интервалов.")
+            if callable(getattr(self.repository, "personal_data", None)):
+                personal = self.repository.personal_data(self.actor)
+                audit.extend(personal["data_access"])
+                tasks += [{**item, "id": "personal:" + item["id"]} for item in personal["tasks"]
+                          if not item["done"] and not cid]
             context = validate_context({"tasks": tasks, "busy": busy + extra, "hours_per_day": args.get("hours_per_day", 3)})
             for task in context["tasks"]:
                 task["source"] = self.repository.source

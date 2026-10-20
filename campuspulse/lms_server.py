@@ -107,6 +107,7 @@ class LmsHandler(Handler):
                        ("admin", "users"): {"GET"}, ("admin", "students"): {"POST"},
                        ("agent", "query"): {"POST"}, ("agent", "stream"): {"POST"},
                        ("data", "resources"): {"GET"}, ("data", "query"): {"POST"},
+                       ("personal",): {"GET"}, ("actions", "prepare"): {"POST"}, ("actions", "confirm"): {"POST"},
                        ("grade-summary",): {"GET"}, ("attendance-summary",): {"GET"}}
             supported = methods.get(tuple(route))
             if len(route) == 1 and route[0] in KINDS:
@@ -170,6 +171,16 @@ class LmsHandler(Handler):
                 return self.json_reply({"logged_out": True})
             if route == ["me"] and method == "GET":
                 return self.json_reply({"user": actor.public()})
+            if route in [["personal"], ["actions", "prepare"], ["actions", "confirm"]]:
+                if not callable(getattr(self.repository, "personal_data", None)):
+                    raise LmsError("Личное хранилище не подключено.", 503)
+                if route == ["personal"]:
+                    return self.json_reply(self.repository.personal_data(actor))
+                if route[-1] == "prepare":
+                    return self.json_reply(self.repository.prepare_personal_change(actor, payload))
+                if set(payload) != {"proposal", "confirmed"} or payload["confirmed"] is not True:
+                    raise LmsError("Нужны proposal и confirmed=true после проверки изменения пользователем.")
+                return self.json_reply(self.repository.confirm_personal_change(actor, payload["proposal"]))
             if route == ["data", "resources"] and method == "GET":
                 return self.json_reply(self.repository.data_resources(actor))
             if route == ["data", "query"] and method == "POST":
