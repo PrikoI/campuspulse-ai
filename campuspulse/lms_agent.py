@@ -7,7 +7,12 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+<<<<<<< HEAD
 from .llm_provider import model_provider
+=======
+from .vertex_gemini import VertexConfig, vertex_loop
+from .alem_provider import AlemConfig, alem_loop
+>>>>>>> 126ecb7 (full rework)
 from .lms_store import LmsError
 from .lms_tools import LmsTools, schemas_for
 from .lms_validation import agent_payload, tool_arguments
@@ -16,6 +21,10 @@ from .lms_json import json_result, model_result, tool_error
 ROOT = Path(__file__).resolve().parent.parent
 
 SYSTEM = """Ты CampusPulse, помощник студенту в LMS. Отвечай кратко по-русски.
+Для расписания используй get_schedule. Для дедлайнов get_assignments.
+Если студент просит составить И сохранить план, вызови prepare_study_plan:
+он сам читает реальные дедлайны и занятия, рассчитывает блоки и готовит предложение.
+Поясни кратко причину выбора инструментов и предложенного плана, без скрытых размышлений.
 Для каталога всей доступной базы и произвольных данных команды сначала вызови
 list_data_resources, затем query_data с именем ресурса и полями из каталога.
 Не угадывай имена ресурсов и колонок. Каталог отражает права текущей сессии.
@@ -97,6 +106,7 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
     if cid and repository.team_database_connected:
         await asyncio.to_thread(repository.check_course, actor, cid)
     engine = payload.get("engine", "local")
+<<<<<<< HEAD
     if engine not in {"local", "gemini", "llm"}:
         raise LmsError("Режим: local или llm (gemini — совместимый alias).")
     use_model = engine != "local"
@@ -106,6 +116,17 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
         if connection is not None:
             raise LmsError("LLM настраивается на сервере; connection в запросе не принимается.")
         provider, config, model_loop = model_provider()
+=======
+    if engine not in {"local", "gemini", "alem"}:
+        raise LmsError("Режим: local, alem или gemini.")
+    model_engine = engine in {'gemini','alem'}
+    if model_engine:
+        if not repository.team_database_connected:
+            raise LmsError("База ещё не подключена. Модель не вызывается без учебных данных. Для отладки используйте local.", 503)
+        if connection is not None:
+            raise LmsError("LMS использует Vertex AI через ADC; Developer API connection не принимается.")
+        config = AlemConfig.from_environment() if engine=='alem' else VertexConfig.from_environment()
+>>>>>>> 126ecb7 (full rework)
         config.require_enabled()
     trace, results = [], {}
     def report(event):
@@ -137,7 +158,11 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 result = tool_error(error)
                 report({"type": "tool_result", "tool": name, "status": "error", "error": result["error"]})
                 return result
+<<<<<<< HEAD
         if use_model:
+=======
+        if model_engine:
+>>>>>>> 126ecb7 (full rework)
             instruction = SYSTEM + f"\nОткрытая страница: {payload.get('page', 'overview')}. Предмет: {cid or 'не выбран'}."
             if callable(getattr(repository, "personal_data", None)):
                 instruction += "\nДля личных задач и настроек используй get_personal_data. prepare_personal_change только готовит изменение. Покажи before/after; пользователь подтверждает через отдельный API. Не утверждай, что предложение уже сохранено."
@@ -152,7 +177,12 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                     reserved = True
             async def model_invoke(name, arguments=None):
                 return model_result(await invoke(name, arguments))
+<<<<<<< HEAD
             answer = await model_loop(message, schemas_for(repository), model_invoke, config,
+=======
+            loop = alem_loop if engine=='alem' else vertex_loop
+            answer = await loop(message, schemas_for(repository), model_invoke, config,
+>>>>>>> 126ecb7 (full rework)
                                        instruction, report, before_request=authorize_model_request)
         elif "personal_change" in payload:
             data = await invoke("prepare_personal_change", payload["personal_change"])
@@ -199,17 +229,23 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 else:
                     data = await invoke("read_materials", {**args, "query": message.split(":", 1)[-1].strip()[:500]})
                     answer = data["error"] if data.get("error") else "Найдены фрагменты с источниками ниже. Локальный поиск не генерирует объяснение." if data.get("matches") else "Совпадений нет. Уточни ключевые слова или добавь материал через преподавателя."
+            elif 'расписан' in text and not any(word in text for word in ['план','подготов']):
+                data = await invoke('get_schedule', args)
+                answer = data.get('error') or f"Занятий на ближайшие 7 дней: {len(data.get('lessons', []))}. Время: Кызылорда (UTC+5)."
             elif any(word in text for word in ["план", "подготов", "недел", "успеть", "расписан"]):
                 hours = payload.get("hours_per_day", 3)
                 if not supplied_hours and callable(getattr(repository, "personal_data", None)):
                     personal = await invoke("get_personal_data")
                     hours = personal.get("preferences", {}).get("hours_per_day", hours)
-                data = await invoke("plan_study", {**args, "hours_per_day": hours, "extra_busy": payload.get("extra_busy", [])})
+                save_plan = any(word in text for word in ['сохран','запиш','добавь'])
+                tool = 'prepare_study_plan' if save_plan else 'plan_study'
+                data = await invoke(tool, {**args, "hours_per_day": hours, **({} if save_plan else {"extra_busy": payload.get("extra_busy", [])})})
                 plan = data.get("plan")
-                answer = f"Рассчитано блоков: {len(plan['blocks'])}, минут: {plan['scheduled_minutes']}, рисков: {len(plan['risks'])}. Google Календарь не изменён." if plan else data["error"]
+                answer = (f"Рассчитано блоков: {len(plan['blocks'])}, минут: {plan['scheduled_minutes']}, рисков: {len(plan['risks'])}. " + ('Проверьте план и подтвердите сохранение личных задач.' if save_plan else 'План учитывает занятия и дедлайны.')) if plan else data["error"]
             else:
                 data = await invoke("get_assignments", args)
                 answer = data["error"] if data.get("error") else f"Из LMS получено заданий: {len(data.get('assignments', []))}. Можно проверить оценки, посещаемость, материалы или рассчитать план."
+<<<<<<< HEAD
     return {"answer": answer, "engine": engine, "reasoning_loop": use_model, "trace": trace,
             "transport": transport, "model_called": use_model,
             "provider": provider if use_model else "local",
@@ -218,3 +254,13 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
             "budget": {"max_model_steps": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
                        "model_queries_per_day": 10, "cloud_resources_created": False},
             "notice": "Локальный режим — проверяемые функции, без генерации LLM." if engine == "local" else "Ответ LLM по инструментам; журнал содержит действия, не приватные мысли модели."}
+=======
+    return {"answer": answer, "engine": engine, "reasoning_loop": model_engine, "trace": trace,
+            "transport": transport, "model_called": model_engine,
+            "provider": "alem" if engine=='alem' else "vertex-ai" if engine == "gemini" else "local",
+            "model": config.model if model_engine else None,
+            "results": results, "source": repository.source, "team_database_connected": repository.team_database_connected,
+            "budget": {"max_model_steps": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
+                       "model_queries_per_day": 10, "cloud_resources_created": False},
+            "notice": "Локальный режим — проверяемые функции, без генерации модели." if engine == "local" else "Ответ модели по MCP-инструментам; журнал содержит действия, не приватные мысли модели."}
+>>>>>>> 126ecb7 (full rework)

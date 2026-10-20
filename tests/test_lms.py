@@ -237,7 +237,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         events = []
         async with lms_tool_session(self.repo, self.actor, self.token, report=events.append) as call:
             self.assertNotIn("load_session", events[-1]["tools"])
-            self.assertEqual(len(events[-1]["tools"]), 8)
+            self.assertEqual(len(events[-1]["tools"]), 9)
             self.assertEqual((await call("get_courses", {}))["status"], 503)
             self.repo.logout(self.token)
             with self.assertRaises(LmsError) as caught:
@@ -369,7 +369,7 @@ class HttpTests(unittest.TestCase):
         model.assert_not_called()
         events = [json.loads(line[6:]) for line in result["body"].splitlines() if line.startswith("data: ")]
         self.assertEqual(events[-1]["type"], "complete")
-        self.assertTrue(any(event["type"] == "mcp_ready" and len(event["tools"]) == 8 for event in events))
+        self.assertTrue(any(event["type"] == "mcp_ready" and len(event["tools"]) == 9 for event in events))
         self.assertTrue(all(event.get("transport") == "mcp" for event in events if event["type"] == "tool_start"))
         self.assertTrue(any(event["type"] == "database_request" and event["executed"] is False for event in events))
         self.assertNotIn(cookie.split("=",1)[1], result["body"])

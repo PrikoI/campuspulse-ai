@@ -21,6 +21,7 @@ from .lms_data import query_request
 from .vertex_gemini import vertex_status
 from .llm_provider import llm_status
 from .grading import evaluate_grades
+<<<<<<< HEAD
 from .server import Handler, LIMIT, exception_leaves
 
 try:
@@ -28,6 +29,11 @@ try:
 except ValueError:
     LMS_CONCURRENCY = 64
 LMS_SLOTS = threading.BoundedSemaphore(LMS_CONCURRENCY)
+=======
+from .server import Handler, LIMIT, SLOTS, exception_leaves
+from .config import load_config
+from .alem_provider import alem_status
+>>>>>>> 126ecb7 (full rework)
 
 LOGIN_ATTEMPTS = {}
 LOGIN_LOCK = threading.Lock()
@@ -40,7 +46,7 @@ FRONTEND_FILES = {
     **{f"/lms-assets/{name}": (name, mime) for name, mime in {
         "style.css": "text/css", "app.mjs": "text/javascript", "api.mjs": "text/javascript",
         "ui.mjs": "text/javascript", "forms.mjs": "text/javascript", "agent.mjs": "text/javascript",
-        "gradebook.mjs": "text/javascript", "courses.mjs": "text/javascript", "schedule.mjs": "text/javascript",
+        "gradebook.mjs": "text/javascript", "courses.mjs": "text/javascript", "schedule.mjs": "text/javascript", "academics.mjs": "text/javascript",
     }.items()},
 }
 
@@ -59,6 +65,20 @@ def invalid_constant(value):
 
 
 class LmsHandler(Handler):
+    def trusted_host(self):
+        public_origin = os.getenv('CAMPUSPULSE_PUBLIC_ORIGIN','').rstrip('/')
+        if not public_origin:
+            return super().trusted_host()
+        parsed = urlparse(public_origin)
+        if parsed.scheme != 'https' or not parsed.netloc or parsed.path:
+            return False
+        allowed = {parsed.netloc, f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'}
+        origins={None,public_origin,f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}'}
+        if self.headers.get('Host') not in allowed or self.headers.get('Origin') not in origins:
+            self.json_reply({'error':'Недопустимый источник запроса.'},403)
+            return False
+        return True
+
     def setup(self):
         super().setup()
         self.connection.settimeout(15)
@@ -128,10 +148,10 @@ class LmsHandler(Handler):
             route = parsed.path.removeprefix("/api/v1/").strip("/").split("/")
             methods = {("status",): {"GET"}, ("openapi.json",): {"GET"}, ("auth", "login"): {"POST"},
                        ("auth", "logout"): {"POST"}, ("me",): {"GET"}, ("grading", "calculate"): {"POST"},
-                       ("admin", "users"): {"GET"}, ("admin", "students"): {"POST"},
+                       ("admin", "users"): {"GET"}, ("admin", "students"): {"POST"}, ('admin','schedule'): {'POST'},
                        ("agent", "query"): {"POST"}, ("agent", "stream"): {"POST"},
                        ("data", "resources"): {"GET"}, ("data", "query"): {"POST"},
-                       ("personal",): {"GET"}, ("actions", "prepare"): {"POST"}, ("actions", "confirm"): {"POST"},
+                       ("personal",): {"GET"}, ("actions", "prepare"): {"POST"}, ("actions", "confirm"): {"POST"}, ("actions", "confirm-plan"): {"POST"},
                        ("grade-summary",): {"GET"}, ("attendance-summary",): {"GET"}}
             supported = methods.get(tuple(route))
             if len(route) == 1 and route[0] in KINDS:
@@ -164,11 +184,19 @@ class LmsHandler(Handler):
                 if not isinstance(payload, dict):
                     raise LmsError("Ожидается объект JSON.")
             if route == ["status"] and method == "GET":
+                selected_provider=os.getenv('CAMPUSPULSE_LLM_PROVIDER','vertex')
+                llm=alem_status() if selected_provider=='alem' else vertex_status()
+                default_engine=('alem' if selected_provider=='alem' else 'gemini') if llm['calls_enabled'] else 'local'
+                if selected_provider!='alem' and os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE'):default_engine='gemini'
                 return self.json_reply({"version": "0.5.0", "source": self.repository.source,
-                    "team_database_connected": self.repository.team_database_connected, "cloud_deployed": False, "default_engine": "local",
+                    "team_database_connected": self.repository.team_database_connected, "cloud_deployed": False, "agent_engine_configured": bool(os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE')), "default_engine": default_engine,
                     "mcp_available": importlib.util.find_spec("mcp") is not None, "auto_model_calls": False,
                     "transport": getattr(self.server, "transport", "mcp"), "authentication": "temporary-local",
+<<<<<<< HEAD
                     "vertex": vertex_status(), "llm": llm_status(), "gemini_available": False,
+=======
+                    "vertex": vertex_status(), 'llm':llm, 'alem':alem_status(), "gemini_available": vertex_status()['calls_enabled'] or bool(os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE')),
+>>>>>>> 126ecb7 (full rework)
                     "frontend_connected": all((LMS_WEB / name).is_file() for name, _ in FRONTEND_FILES.values()), "openapi": "/api/v1/openapi.json",
                     "notice": "Командная база не подключена. Собственные базы и учебные примеры не используются." if not self.repository.team_database_connected else "Используется адаптер команды."})
             if route == ["openapi.json"] and method == "GET":
@@ -196,7 +224,7 @@ class LmsHandler(Handler):
                 return self.json_reply({"logged_out": True})
             if route == ["me"] and method == "GET":
                 return self.json_reply({"user": actor.public()})
-            if route in [["personal"], ["actions", "prepare"], ["actions", "confirm"]]:
+            if route in [["personal"], ["actions", "prepare"], ["actions", "confirm"], ['actions','confirm-plan']]:
                 if not callable(getattr(self.repository, "personal_data", None)):
                     raise LmsError("Личное хранилище не подключено.", 503)
                 if route == ["personal"]:
@@ -205,6 +233,9 @@ class LmsHandler(Handler):
                     return self.json_reply(self.repository.prepare_personal_change(actor, payload))
                 if set(payload) != {"proposal", "confirmed"} or payload["confirmed"] is not True:
                     raise LmsError("Нужны proposal и confirmed=true после проверки изменения пользователем.")
+                if route == ['actions','confirm-plan']:
+                    from .study_plan import confirm_plan
+                    return self.json_reply(confirm_plan(self.repository, actor, payload['proposal']))
                 return self.json_reply(self.repository.confirm_personal_change(actor, payload["proposal"]))
             if route == ["data", "resources"] and method == "GET":
                 return self.json_reply(self.repository.data_resources(actor))
@@ -225,6 +256,11 @@ class LmsHandler(Handler):
                 return self.json_reply({"user": self.repository.create_student(actor, payload)}, 201)
             if route[0] == "admin":
                 self.repository.require_admin(actor)
+                if route == ['admin','schedule']:
+                    from .schedule_changes import update_schedule
+                    if not callable(getattr(self.repository,'_run',None)):
+                        raise LmsError('Редактирование расписания требует Firestore.',503)
+                    return self.json_reply(update_schedule(self.repository,actor,payload))
                 kind = route[1] if len(route) > 1 else ""
                 if kind not in KINDS:
                     raise LmsError("Коллекция не найдена.", 404)
@@ -267,8 +303,12 @@ class LmsHandler(Handler):
                     self.end_headers(); self.sse_started = True
                     emit = self.emit
                     emit({"type": "started", "source": self.repository.source})
-                result = asyncio.run(asyncio.wait_for(run_lms_query(self.repository, self.lms_token(), payload, emit=emit,
-                                    transport=getattr(self.server, "transport", "mcp")), timeout=100))
+                if payload.get('engine') == 'gemini' and os.getenv('CAMPUSPULSE_AGENT_ENGINE_RESOURCE'):
+                    from .cloud_agent import remote_query
+                    operation = remote_query(self.repository,self.lms_token(),payload,emit)
+                else:
+                    operation = run_lms_query(self.repository, self.lms_token(), payload, emit=emit,transport=getattr(self.server, 'transport','mcp'))
+                result = asyncio.run(asyncio.wait_for(operation,timeout=200))
                 if self.sse_started:
                     self.emit({"type": "complete", "response": result})
                     return
@@ -300,8 +340,10 @@ class LmsHandler(Handler):
 
 
 def main():
+    load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--port", type=int, default=int(os.getenv('PORT','8766')))
+    parser.add_argument('--host',default='127.0.0.1')
     parser.add_argument("--check", action="store_true", help="Validate local configuration and dependencies without opening a port or calling a model")
     parser.add_argument("--check-vertex", action="store_true", help="Check Vertex configuration strings only; no ADC discovery or network")
     args = parser.parse_args()
@@ -327,12 +369,12 @@ def main():
     except LmsError as error:
         raise SystemExit(str(error)) from None
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), LmsHandler)
+        server = ThreadingHTTPServer((args.host, args.port), LmsHandler)
     except OSError:
         raise SystemExit(f"Cannot bind 127.0.0.1:{args.port}. Check the port or pass --port <number>.") from None
     server.repository, server.transport = repository, "mcp"
     server.daemon_threads = True
-    print(f"CampusPulse LMS: http://127.0.0.1:{args.port}/ | API: /api/v1 | {repository.source} | cloud deployment disabled", flush=True)
+    print(f"CampusPulse LMS: http://{args.host}:{args.port}/ | API: /api/v1 | {repository.source} | Vertex configured={vertex_status()['calls_enabled']}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

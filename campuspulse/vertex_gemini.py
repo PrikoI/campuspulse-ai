@@ -9,6 +9,7 @@ from datetime import datetime
 
 from .domain import TZ
 from .lms_store import LmsError
+from .config import google_credentials
 
 
 @dataclass(frozen=True)
@@ -53,8 +54,7 @@ async def vertex_loop(message, schemas, invoke, config, instruction, report=None
     from google.genai import types
 
     try:
-        credential, _ = await asyncio.to_thread(google.auth.default,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        credential = await asyncio.to_thread(google_credentials)
     except Exception:
         raise LmsError("ADC для Vertex AI недоступны. Проверьте серверную identity.", 503) from None
     declarations = [types.FunctionDeclaration(name=spec["name"], description=spec["description"],

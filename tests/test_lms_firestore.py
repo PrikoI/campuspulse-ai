@@ -375,8 +375,8 @@ class RepositoryTests(unittest.TestCase):
 
     def test_existing_mcp_contracts_and_schedule_access(self):
         tools = LmsTools(self.repo, STUDENT)
-        self.assertEqual(len(LMS_SCHEMAS), 8)
-        self.assertEqual(len(schemas_for(self.repo)), 10)
+        self.assertEqual(len(LMS_SCHEMAS), 9)
+        self.assertEqual(len(schemas_for(self.repo)), 12)
         self.assertEqual(tools.call("get_courses")["courses"][0]["id"], "course")
         self.assertTrue(tools.call("get_assignments")["assignments"])
         self.assertEqual(tools.call("query_data", {"resource": "lessons"})["items"], [])

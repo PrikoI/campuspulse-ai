@@ -55,7 +55,11 @@ def openapi_document():
         "AgentRequest": obj({"message": {**string, "minLength": 1, "maxLength": 5000}, "course_id": {"type": ["string", "null"], "maxLength": 120},
                              "data_query": ref("DataQuery"),
                              "page": {"type": "string", "enum": sorted(PAGES), "default": "overview"},
+<<<<<<< HEAD
                              "engine": {"type": "string", "enum": ["local", "gemini", "llm"], "default": "local"},
+=======
+                             "engine": {"type": "string", "enum": ["local", "gemini", "alem"], "default": "local"},
+>>>>>>> 126ecb7 (full rework)
                              "target": {"type": "number", "minimum": 0, "maximum": 100},
                              "hours_per_day": {"type": "number", "minimum": 1, "maximum": 8, "default": 3}, "extra_busy": busy}, ["message"]),
         "CalculationRequest": obj({"items": {"type": "array", "maxItems": 100, "items": obj({"component": fields["component"], "score": score, "max_score": fields["max_score"], "weight": fields["weight"]}, ["component"])}, "policy": ref("Policy"), "target": {"type": "number", "minimum": 0, "maximum": 100}}, ["items"]),
@@ -71,10 +75,15 @@ def openapi_document():
                                "record_id": {"type": ["string", "null"], "maxLength": 120},
                                "payload": {"type": "object", "description": "Task: title, course, due, minutes, done; preferences: hours_per_day. See docs/FIRESTORE.md."}}, ["target", "payload"]),
         "ActionConfirmation": obj({"proposal": {"type": "string", "maxLength": 10000}, "confirmed": {"const": True}}, ["proposal", "confirmed"]),
+        "PlanConfirmation": obj({"proposal": {"type":"string","maxLength":200000},"confirmed":{"const":True}},['proposal','confirmed']),
+        "ScheduleChanges": obj({'changes':{'type':'array','minItems':1,'maxItems':100,'items':obj({'id':identifier,'starts_at':stamp,'ends_at':stamp,'expected_start':stamp,'expected_end':stamp},['id','starts_at','ends_at','expected_start','expected_end'])}},['changes']),
     }
     schemas["AgentRequest"]["properties"]["personal_change"] = ref("PersonalChange")
     for kind in sorted(KINDS):
         properties = {key: deepcopy(fields[key]) for key in sorted(FIELDS[kind])}
+        if kind=='assignments':
+            for key in ['item_id','lesson_id']:
+                properties[key]['type']=['string','null']
         schemas[kind + "Create"] = obj(properties, sorted(REQUIRED[kind]))
         schemas[kind + "Update"] = {**obj(properties), "minProperties": 1}
     paths = {}
@@ -108,6 +117,8 @@ def openapi_document():
     endpoint("/api/v1/personal", "get", "Student: saved personal tasks and allowed preferences", database=True)
     endpoint("/api/v1/actions/prepare", "post", "Student: prepare a signed change for review; no writes", "PersonalChange", database=True)
     endpoint("/api/v1/actions/confirm", "post", "Student: explicitly confirm the reviewed change; unavailable to LLM tools", "ActionConfirmation", database=True)
+    endpoint('/api/v1/actions/confirm-plan','post','Confirm a reviewed study plan; idempotent personal task creation','PlanConfirmation',database=True)
+    endpoint('/api/v1/admin/schedule','post','Atomically move lessons; reject overlaps and stale edits; update linked deadlines','ScheduleChanges',database=True)
     for kind in sorted(KINDS):
         endpoint(f"/api/v1/{kind}", "get", "Student: enrollment-scoped " + kind, query=["course_id"], database=True)
         endpoint(f"/api/v1/admin/{kind}", "get", "Teacher: read " + kind, query=["course_id"], database=True)

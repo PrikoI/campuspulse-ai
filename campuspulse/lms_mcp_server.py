@@ -36,6 +36,18 @@ def invoke(name, args=None):
 
 
 @mcp.tool()
+def get_schedule(course_id: str | None = None) -> dict[str, Any]:
+    """Read upcoming lessons for the next seven days."""
+    return invoke('get_schedule', {'course_id': course_id} if course_id else {})
+
+
+@mcp.tool()
+def prepare_study_plan(course_id: str | None = None, hours_per_day: float = 3) -> dict[str, Any]:
+    """Calculate and propose personal study tasks; user confirmation is mandatory."""
+    return invoke('prepare_study_plan', {'hours_per_day': hours_per_day, **({'course_id': course_id} if course_id else {})})
+
+
+@mcp.tool()
 def get_courses() -> dict[str, Any]:
     """Read enrolled courses for the authenticated student."""
     return invoke("get_courses")

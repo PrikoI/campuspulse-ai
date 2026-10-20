@@ -89,8 +89,13 @@ def agent_payload(payload):
         clean["course_id"] = identifier(clean["course_id"])
     if not isinstance(clean.get("page", "overview"), str) or clean.get("page", "overview") not in PAGES:
         raise LmsError("Неизвестная страница LMS.")
+<<<<<<< HEAD
     if not isinstance(clean.get("engine", "local"), str) or clean.get("engine", "local") not in {"local", "gemini", "llm"}:
         raise LmsError("Режим: local, llm или gemini.")
+=======
+    if not isinstance(clean.get("engine", "local"), str) or clean.get("engine", "local") not in {"local", "gemini", "alem"}:
+        raise LmsError("Режим: local, alem или gemini.")
+>>>>>>> 126ecb7 (full rework)
     if "target" in clean:
         clean["target"] = float(number(clean["target"], "Целевой итог"))
     clean["hours_per_day"], clean["extra_busy"] = planning_options(clean.get("hours_per_day", 3), clean.get("extra_busy", []))
@@ -108,6 +113,8 @@ def record_payload(kind, payload, record_id=None):
     clean = dict(payload)
     for key, value in payload.items():
         if key.endswith("_id"):
+            if kind == 'assignments' and key in {'item_id','lesson_id'} and value is None:
+                continue
             clean[key] = identifier(value, key)
         elif key in {"code", "name", "title", "description", "text", "comment", "kind"}:
             limit = {"code": 80, "name": 200, "description": 10000, "text": 50000, "comment": 2000}.get(key, 200)

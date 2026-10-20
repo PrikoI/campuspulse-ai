@@ -1,7 +1,9 @@
 import {schedule} from './schedule.mjs';
+import {assignments,enrollments} from './academics.mjs';
 import {courseList} from './courses.mjs';
 import {gradebook} from './gradebook.mjs';
 import {api,onUnauthorized} from './api.mjs';
+<<<<<<< HEAD
 import {element,records,showError} from './ui.mjs';
 import {collections,adminForm,enrollmentForm,gradeForm,personalForm} from './forms.mjs';
 import {bindAgent} from './agent.mjs';
@@ -9,11 +11,20 @@ const $ = selector => document.querySelector(selector);
 let user = null, page = 'courses', requestVersion = 0, pendingProposal = null;
 const pages = {students:'Студенты',courses:'Дисциплины',enrollments:'Зачисление',assignments:'Задания',grade_items:'Элементы оценок',materials:'Материалы',grades:'Оценки',attendance:'Посещаемость',schedule:'Расписание',plan:'Учебный план',data:'Каталог данных',personal:'Личные задачи'};
 function reset() { user = null; requestVersion++; pendingProposal = null; stopAgent(); delete $('#workspace').dataset.role; $('#workspace').hidden = true; $('#login-panel').hidden = false; $('#logout').hidden = true; $('#identity').textContent = ''; $('#content').replaceChildren(); $('#trace').textContent = ''; $('#answer').textContent = ''; $('#review').hidden = true; $('#course').replaceChildren(new Option('Все доступные','')); }
+=======
+import {element,records,showError,studyPlan} from './ui.mjs';
+import {collections,adminForm,personalForm} from './forms.mjs';
+import {bindAgent} from './agent.mjs';
+const $ = selector => document.querySelector(selector);
+let user = null, page = 'courses', requestVersion = 0, pendingProposal = null;
+const pages = {courses:'Дисциплины',enrollments:'Ученики',grade_items:'Работы',assignments:'Задания',materials:'Материалы',grades:'Оценки',attendance:'Посещаемость',schedule:'Расписание',plan:'Учебный план',data:'Каталог данных',personal:'Личные задачи'};
+function reset() { user = null; requestVersion++; pendingProposal = null; stopAgent(); $('#workspace').hidden = true; $('#login-panel').hidden = false; $('#logout').hidden = true; $('#identity').textContent = ''; $('#content').replaceChildren(); $('#trace').textContent = ''; $('#answer').textContent = ''; $('#review').hidden = true; $('#course').replaceChildren(new Option('Все доступные','')); }
+>>>>>>> 126ecb7 (full rework)
 onUnauthorized(reset);
 function review(proposal) { pendingProposal = proposal; $('#review-data').textContent = JSON.stringify(proposal.change,null,2); $('#review').hidden = false; }
 const prepare = async change => { const actor = user, proposal = await api('actions/prepare',{method:'POST',body:change}); if (actor === user) review(proposal); };
 const stopAgent = bindAgent(() => ({page:Object.hasOwn(pages,page) && !['personal','data'].includes(page) ? page : 'overview',...($('#course').value ? {course_id:$('#course').value} : {})}),review);
-$('#confirm').addEventListener('click',async () => { if (!pendingProposal) return; $('#confirm').disabled = true; try { await api('actions/confirm',{method:'POST',body:{proposal:pendingProposal.proposal,confirmed:true}}); pendingProposal = null; $('#review').hidden = true; await load(); } catch(error) { showError(error); } finally { $('#confirm').disabled = false; } });
+$('#confirm').addEventListener('click',async () => { if (!pendingProposal) return; $('#confirm').disabled = true; try { await api(pendingProposal.change?.target === 'study_plan' ? 'actions/confirm-plan' : 'actions/confirm',{method:'POST',body:{proposal:pendingProposal.proposal,confirmed:true}}); pendingProposal = null; $('#review').hidden = true; await load(); } catch(error) { showError(error); } finally { $('#confirm').disabled = false; } });
 $('#cancel').addEventListener('click',() => { pendingProposal = null; $('#review').hidden = true; });
 async function load() {
   const version = ++requestVersion, container = $('#content'), cid = $('#course').value;
@@ -38,6 +49,11 @@ async function load() {
       await gradebook(target, cid, load, () => version === requestVersion);
     } else if (page === 'schedule') {
       await schedule(target, prefix, query, () => version === requestVersion);
+    } else if (page === 'enrollments' && user.role === 'admin') {
+      await enrollments(target, () => version === requestVersion, load);
+    } else if (page === 'assignments') {
+      if (user.role === 'admin') adminForm(target,'assignments',load);
+      await assignments(target,prefix,query,() => version === requestVersion);
     } else if (page === 'data') {
       const data = await api('data/resources'); if (version !== requestVersion) return; records(target,data.resources);
       const form = element('form',undefined,target), input = element('textarea',undefined,element('label','Именованный запрос JSON: resource, filters, fields, limit',form)); input.value = '{}'; element('button','Выполнить запрос',form);
@@ -50,7 +66,9 @@ async function load() {
     } else if (page === 'plan' || (['grades','attendance'].includes(page) && user.role === 'student')) {
       if (page !== 'plan' && !cid) { element('p','Выберите дисциплину.',target); return; }
       const result = page === 'plan' ? await api('agent/query',{method:'POST',body:{message:'План подготовки',page:'plan',...(cid ? {course_id:cid} : {})}}) : await api(`${page === 'grades' ? 'grade' : 'attendance'}-summary${query}`);
-      if (version !== requestVersion) return; element('pre',JSON.stringify(result,null,2),target);
+      if (version !== requestVersion) return;
+      if (page==='plan' && result.results?.plan_study?.plan) studyPlan(target,result.results.plan_study.plan);
+      else element('pre',JSON.stringify(result,null,2),target);
     } else {
       const kind = page === 'schedule' ? 'lessons' : page;
       if (!collections.includes(kind)) return;
@@ -75,15 +93,29 @@ async function load() {
   }
 }
 function signedIn(actor) {
+<<<<<<< HEAD
   user = actor; $('#login-panel').hidden = true; $('#workspace').dataset.role = actor.role; $('#workspace').hidden = false; $('#logout').hidden = false; $('#identity').textContent = `${actor.name} (${actor.role})`; $('#agent-panel').hidden = actor.role !== 'student';
   $('#navigation').replaceChildren(); const available = actor.role === 'admin' ? ['students',...collections.filter(kind => kind !== 'lessons'),'schedule','data'] : Object.keys(pages).filter(name => !['students','enrollments','grade_items'].includes(name));
+=======
+  user = actor; $('#login-panel').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; $('#identity').textContent = `${actor.name} (${actor.role})`; $('#agent-panel').hidden = actor.role !== 'student';
+  $('#navigation').replaceChildren(); const available = actor.role === 'admin' ? [...collections.filter(kind => !['lessons'].includes(kind)), 'schedule','data'] : Object.keys(pages).filter(name => !['enrollments','grade_items'].includes(name));
+>>>>>>> 126ecb7 (full rework)
   for (const name of available) { const button = element('button',pages[name] || name,$('#navigation')); button.addEventListener('click',() => { page = name; for (const item of $('#navigation').children) item.removeAttribute('aria-current'); button.setAttribute('aria-current','page'); load(); }); }
   page = 'courses'; load();
 }
 $('#login').addEventListener('submit',async event => { event.preventDefault(); const data = new FormData(event.currentTarget); try { const result = await api('auth/login',{method:'POST',body:{username:data.get('username'),password:data.get('password')}}); event.target.reset(); signedIn(result.user); } catch(error) { showError(error); } });
 $('#logout').addEventListener('click',async () => { try { await api('auth/logout',{method:'POST',body:{}}); reset(); } catch(error) { showError(error); } });
 $('#course').addEventListener('change',load);
+$('#agent-prompts').addEventListener('click',event => {
+  if (event.target.tagName !== 'BUTTON') return;
+  $('#agent textarea').value=event.target.textContent;
+  $('#agent textarea').focus();
+});
 try { document.documentElement.dataset.theme = localStorage.getItem('campuspulse-theme') || 'light'; } catch {}
 $('#theme').addEventListener('click',() => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = theme; try { localStorage.setItem('campuspulse-theme',theme); } catch {} });
+<<<<<<< HEAD
 try { const data = await api('status'); const model = data.llm || data.vertex; $('#status').textContent = `${data.source}. ${data.team_database_connected ? 'Хранилище подключено' : 'Учебная база не подключена'}. LLM: ${model?.provider || 'не настроен'} / ${model?.model || '—'} (${model?.calls_enabled ? 'разрешён' : 'выключен'}).`; const option = document.querySelector('#agent select[name="engine"] option[value="llm"]'); if (option && model?.model) option.textContent = model.model; } catch(error) { showError(error); }
+=======
+try { const data = await api('status'); $('#agent select').value=data.default_engine || 'local'; const model=data.llm||data.vertex; $('#status').textContent = `${data.source}. ${data.team_database_connected ? 'Хранилище подключено' : 'Учебная база не подключена'}. ${model?.model || 'AI'}: ${model?.calls_enabled ? 'настроен' : 'ожидает настройки'}.`; } catch(error) { showError(error); }
+>>>>>>> 126ecb7 (full rework)
 try { const data = await api('me'); signedIn(data.user); } catch(error) { if (error.status !== 401) showError(error); }

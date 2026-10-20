@@ -11,7 +11,7 @@ KINDS = {"courses", "enrollments", "assignments", "grade_items", "grades", "less
 FIELDS = {
     "courses": {"code", "name", "policy", "archived", "instructor_ids"},
     "enrollments": {"course_id", "student_id", "archived"},
-    "assignments": {"course_id", "title", "description", "due", "minutes", "week"},
+    "assignments": {"course_id", "title", "description", "due", "minutes", "week", "item_id", "lesson_id"},
     "grade_items": {"course_id", "title", "component", "max_score", "weight", "week"},
     "grades": {"course_id", "student_id", "item_id", "score", "comment"},
     "lessons": {"course_id", "title", "starts_at", "ends_at", "kind"},

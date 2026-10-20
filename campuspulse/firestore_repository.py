@@ -21,8 +21,13 @@ from .lms_validation import collection, identifier, record_payload, student_payl
 
 
 DEFAULTS = {
+<<<<<<< HEAD
     "courses": {"archived": False, "instructor_ids": []}, "enrollments": {"archived": False},
     "assignments": {"description": "", "due": None, "minutes": None, "week": None},
+=======
+    "courses": {"archived": False}, "enrollments": {"archived": False},
+    "assignments": {"description": "", "due": None, "minutes": None, "week": None, "item_id":None, "lesson_id":None},
+>>>>>>> 126ecb7 (full rework)
     "grade_items": {"max_score": 100, "weight": 1, "week": None},
     "grades": {"comment": ""}, "lessons": {"kind": ""},
     "attendance": {}, "materials": {"week": None, "source_url": ""},
@@ -366,6 +371,12 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
                     user = self.storage.get(f"users/{merged['student_id']}", tx)
                     if user is None or user.get("role") != "student":
                         raise LmsError("Студент не найден.", 404)
+                if kind == 'assignments':
+                    for field, related_kind in [('item_id','grade_items'),('lesson_id','lessons')]:
+                        if merged.get(field):
+                            related = self.storage.get(f"{related_kind}/{merged[field]}",tx)
+                            if related is None or related.get('course_id') != merged['course_id']:
+                                raise LmsError('Работа и занятие должны принадлежать тому же предмету.',409)
                 if kind in {"grades", "attendance"}:
                     related_kind, related_key = ("grade_items", "item_id") if kind == "grades" else ("lessons", "lesson_id")
                     related = self.storage.get(f"{related_kind}/{merged[related_key]}", tx)
@@ -430,12 +441,12 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
         def remove(tx):
             course = self.storage.get(f"courses/{key}", tx)
             if course is None:
-                raise LmsError("?????????? ?? ???????.", 404)
+                raise LmsError("Дисциплина не найдена.", 404)
             if course.get("owner_id") != actor.user_id:
-                raise LmsError("??? ???? ?? ???????? ??????????.", 403)
+                raise LmsError("Нет прав на удаление дисциплины.", 403)
             for kind in sorted(KINDS - {"courses"}):
                 if self.storage.scan(kind, [("course_id", "==", key)], tx, limit=1):
-                    raise LmsError("?????????? ???????? ????????? ?????? (????????, ?????? ??? ??????). ??????? ??????? ????? ??? ??????????? ??????????.", 409)
+                    raise LmsError("У дисциплины есть связанные данные. Используйте архивирование.", 409)
             self.storage.delete(tx, f"courses/{key}")
             return {"deleted": True, "id": key}
         return self._run(actor, "courses", "delete", remove)
@@ -446,10 +457,10 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
         def remove(tx):
             row = self.storage.get(path, tx)
             if row is None:
-                raise LmsError("?????? ?? ???????.", 404)
+                raise LmsError("Оценка не найдена.", 404)
             course = self.storage.get(f"courses/{row['course_id']}", tx)
             if course is None or course.get("owner_id") != actor.user_id:
-                raise LmsError("??? ???? ?? ????????? ?????.", 403)
+                raise LmsError("Нет прав на изменение оценки.", 403)
             self.storage.delete(tx, path)
             return {"deleted": True, "id": record_id}
         return self._run(actor, "grades", "delete", remove)
@@ -467,13 +478,31 @@ class FirestoreRepository(PersonalDataMixin, TeamRepository):
         self._run(actor, "users", "create", ensure)
         return token, actor
 
+    def principal(self, session_token):
+        actor = PendingRepository.principal(self,session_token)
+        key = hashlib.sha256(session_token.encode()).hexdigest()
+        if self.storage.get(f'users/{actor.user_id}/revoked_sessions/{key}') is not None:
+            raise LmsError('Сессия завершена. Войдите заново.',401)
+        return actor
+
+    def logout(self, token):
+        actor = self.principal(token)
+        key = hashlib.sha256(token.encode()).hexdigest()
+        self._run(actor,'sessions','delete',lambda tx:self.storage.put(tx,f'users/{actor.user_id}/revoked_sessions/{key}',{'revoked':True}))
+        PendingRepository.logout(self,token)
+
     def users(self, actor):
         self.require_admin(actor)
         def read(tx):
+<<<<<<< HEAD
             ids = {uid for uid, account in DEV_ACCOUNTS.items() if account[2] == "student"}
             profiles = self.storage.get_many([f"users/{uid}" for uid in sorted(ids)], tx, fields=["name", "role"])
             return [{"id": path.split("/")[-1], "role": "student", "name": row.get("name", "")}
                     for path, row in profiles.items() if row is not None and row.get("role") == "student"]
+=======
+            profiles = self._scan('users',[('role','==','student')],tx,fields=['name','role'])
+            return [{"id": key, "role":"student", "name":row.get('name','')} for key,row in profiles]
+>>>>>>> 126ecb7 (full rework)
         return self._run(actor, "users", "read", read, read_only=True)
 
     def create_student(self, actor, payload):

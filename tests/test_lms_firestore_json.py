@@ -247,7 +247,7 @@ class AgentBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 await session.call_tool("load_session", {"session_token": token})
                 tools = await session.list_tools()
                 selected = [tool for tool in tools.tools if tool.name in {spec["name"] for spec in schemas_for(repo)}]
-                self.assertEqual(len(selected), 10)
+                self.assertEqual(len(selected), 12)
                 self.assertTrue(all(tool.outputSchema and tool.outputSchema.get("type") == "object" for tool in selected))
                 result = await session.call_tool("query_data", {"resource": "assignments", "fields": ["title", "due"], "limit": 1})
                 self.assertIsNotNone(result.structuredContent)

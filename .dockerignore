@@ -1,0 +1,17 @@
+*
+!campuspulse/
+!campuspulse/**
+!web/
+!web/lms/
+!web/lms/**
+!requirements.txt
+!requirements-cloud.txt
+!Dockerfile
+**/__pycache__
+**/*.pyc
+**/*key*.json
+**/*credentials*.json
+.env
+.local
+.git
+.venv

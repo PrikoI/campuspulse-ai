@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CampusPulse AI — LMS</title><link rel="stylesheet" href="/lms-assets/style.css"></head>
+<<<<<<< HEAD
 <body>
 <header class="topbar">
   <div class="brand"><span class="brand-mark">C</span><strong>CampusPulse <b>AI</b></strong></div>
@@ -34,3 +35,19 @@
   </section>
   <p id="error" role="alert"></p>
 </main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
+=======
+<body><header><strong>CampusPulse <span>AI</span></strong><button id="theme" type="button">Тема</button><span id="identity"></span><button id="logout" type="button" hidden>Выйти</button></header>
+<p id="status" role="status">Проверка сервера…</p>
+<main><section id="login-panel"><h1>Ваш учебный день</h1><p>Войдите в LMS. Данные доступны только в рамках вашей сессии.</p>
+<form id="login"><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button>Войти</button></form></section>
+<section id="workspace" hidden><nav id="navigation" aria-label="Разделы LMS"></nav><label>Дисциплина<select id="course"><option value="">Все доступные</option></select></label>
+<section><h1 id="page-title"></h1><div id="content"></div></section>
+<aside id="agent-panel" class="agent-panel"><div class="agent-heading"><div><p class="eyebrow">CAMPUSPULSE ASSISTANT</p><h2>Меньше хаоса. Больше времени на учёбу.</h2></div><span class="agent-badge">MCP · Firestore · AI</span></div>
+<p>Спроси о дедлайнах, свободном времени и подготовке. Помощник проверяет данные твоих предметов.</p>
+<div id="agent-prompts" class="agent-prompts"><button type="button">Какие ближайшие дедлайны?</button><button type="button">Покажи расписание на неделю</button><button type="button">Составь и сохрани план подготовки на неделю</button></div>
+<form id="agent"><label>Чем помочь?<textarea name="message" maxlength="5000" placeholder="Составь план подготовки с учётом моих пар и дедлайнов" required></textarea></label><div class="agent-form-footer"><label>Режим<select name="engine"><option value="alem">Gemma · Alem AI</option><option value="local">Инструменты без модели</option><option value="gemini">Gemini · Vertex AI</option></select></label><button>Отправить запрос</button></div></form>
+<p id="agent-progress" role="status" hidden><span class="loading-spinner" aria-hidden="true"></span> Помощник работает…</p>
+<div id="activity" class="agent-activity" aria-live="polite"></div><p id="answer" role="status"></p><div id="agent-results"></div><details><summary>Технический журнал MCP</summary><pre id="trace"></pre></details></aside>
+<section id="review" hidden><h2>Проверьте изменение</h2><pre id="review-data"></pre><button id="confirm" type="button">Подтвердить запись</button><button id="cancel" type="button">Отменить</button></section>
+</section><p id="error" role="alert"></p></main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
+>>>>>>> 126ecb7 (full rework)

@@ -1,0 +1,13 @@
+.git/
+.venv/
+.local/
+.env
+firebase-key.json
+**/*credentials*.json
+**/*service-account*.json
+output/
+build/
+tests/
+frontend-team-source/
+frontend-draft/
+*.log

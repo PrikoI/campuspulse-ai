@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Alem transport, function calling and LMS boundary, without live services."""
 import copy
 import json
@@ -154,3 +155,113 @@ class LoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("proposal", result["results"]["prepare_personal_change"])
         self.assertEqual(repo.personal_data(STUDENT)["tasks"], [])
         self.assertNotIn("private-test-key", json.dumps(result))
+=======
+"""Alem compatibility contract with mocked HTTP; never sends a real key."""
+import copy
+import json
+import os
+import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock,MagicMock,patch
+
+from campuspulse.alem_provider import AlemConfig,alem_loop,alem_status,decode_action
+from campuspulse.lms_store import LmsError
+
+CONFIG=AlemConfig('fake-private-alem-key',enabled=True)
+SCHEMAS=[{'name':'get_courses','description':'Read enrolled courses','inputSchema':{'type':'object','properties':{}}}]
+
+
+def completion(content=None,tool_calls=None):
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content,tool_calls=tool_calls))])
+
+
+class AlemConfigTests(unittest.TestCase):
+    def test_key_is_not_in_status_repr_or_missing_key_error(self):
+        with patch.dict(os.environ,{'OPENAI_API_KEY':CONFIG.api_key,'CAMPUSPULSE_ALLOW_CLOUD':'1'},clear=True):
+            status=alem_status()
+        self.assertTrue(status['calls_enabled'])
+        self.assertNotIn(CONFIG.api_key,repr(status))
+        self.assertNotIn(CONFIG.api_key,repr(CONFIG))
+        with self.assertRaises(LmsError):AlemConfig('',enabled=True).require_enabled()
+        self.assertFalse(AlemConfig('key',base_url='http://unsafe.example/v1').configured)
+
+    def test_action_parser_rejects_commands_and_invalid_arguments(self):
+        for raw in ['hello','[]','{"tool":"get_courses","arguments":[]}','{"answer":"","extra":"command"}']:
+            with self.assertRaises(LmsError):decode_action(raw)
+        self.assertEqual(decode_action('```json\n{"tool":"get_courses","arguments":{}}\n```')['tool'],'get_courses')
+
+
+class AlemLoopTests(unittest.IsolatedAsyncioTestCase):
+    async def test_json_chat_protocol_uses_documented_endpoint_and_validated_tools(self):
+        client=MagicMock();captured=[]
+        replies=[completion('{"tool":"get_courses","arguments":{}}'),completion('{"answer":"Found courses"}')]
+        def create(**kwargs):captured.append(copy.deepcopy(kwargs));return replies.pop(0)
+        client.chat.completions.create.side_effect=create
+        invoke=AsyncMock(return_value={'courses':[{'id':'one','name':'Math'}]})
+        authorize=AsyncMock();events=[]
+        with patch('openai.OpenAI',return_value=client) as factory:
+            answer=await alem_loop('Plan',SCHEMAS,invoke,CONFIG,'Instructions',events.append,before_request=authorize)
+        self.assertEqual(answer,'Found courses')
+        self.assertEqual(factory.call_args.kwargs['base_url'],'https://llm.alem.ai/v1')
+        self.assertEqual(factory.call_args.kwargs['max_retries'],0)
+        self.assertEqual(captured[0]['model'],'gemma4')
+        self.assertNotIn('tools',captured[0])
+        self.assertIn('Math',captured[1]['messages'][-1]['content'])
+        self.assertEqual(authorize.await_count,2)
+        invoke.assert_awaited_once_with('get_courses',{})
+        self.assertNotIn(CONFIG.api_key,repr(events))
+        client.close.assert_called_once()
+
+    async def test_native_tool_call_id_is_returned(self):
+        client=MagicMock();captured=[]
+        tool=SimpleNamespace(id='call-123',type='function',function=SimpleNamespace(name='get_courses',arguments='{}'))
+        replies=[completion(tool_calls=[tool]),completion('Answer')]
+        def create(**kwargs):captured.append(copy.deepcopy(kwargs));return replies.pop(0)
+        client.chat.completions.create.side_effect=create
+        with patch('openai.OpenAI',return_value=client):
+            result=await alem_loop('Plan',SCHEMAS,AsyncMock(return_value={'courses':[]}),AlemConfig('key',tool_mode='native',enabled=True),'instruction')
+        self.assertEqual(result,'Answer')
+        self.assertEqual(captured[1]['messages'][-1]['tool_call_id'],'call-123')
+        self.assertEqual(captured[0]['tools'][0]['function']['name'],'get_courses')
+
+    async def test_api_auth_errors_do_not_leak_request_or_key(self):
+        client=MagicMock();error=RuntimeError('PRIVATE KEY '+CONFIG.api_key);error.status_code=401
+        client.chat.completions.create.side_effect=error
+        with patch('openai.OpenAI',return_value=client):
+            with self.assertRaises(LmsError) as caught:
+                await alem_loop('q',SCHEMAS,AsyncMock(),CONFIG,'instruction')
+        self.assertNotIn(CONFIG.api_key,str(caught.exception))
+        self.assertEqual(caught.exception.status,503)
+        client.chat.completions.create.assert_called_once()
+
+    async def test_unknown_tool_is_never_executed_and_loop_is_bounded(self):
+        client=MagicMock();client.chat.completions.create.return_value=completion('{"tool":"shell","arguments":{}}')
+        invoke=AsyncMock()
+        with patch('openai.OpenAI',return_value=client):
+            answer=await alem_loop('q',SCHEMAS,invoke,CONFIG,'instruction')
+        self.assertIn('лимит',answer)
+        self.assertEqual(client.chat.completions.create.call_count,3)
+        invoke.assert_not_awaited()
+
+    async def test_disabled_model_does_not_create_client(self):
+        with patch('openai.OpenAI') as factory,self.assertRaises(LmsError):
+            await alem_loop('q',SCHEMAS,AsyncMock(),AlemConfig('key'),'instruction')
+        factory.assert_not_called()
+
+    async def test_agent_routes_alem_to_the_same_authorized_mcp_registry(self):
+        from campuspulse.firestore_repository import FirestoreRepository
+        from campuspulse.lms_agent import run_lms_query
+        from tests.test_lms_firestore import seeded_storage,CONFIG as FIREBASE_CONFIG
+        repo=FirestoreRepository(seeded_storage(),FIREBASE_CONFIG)
+        token,_=repo.login('student1','student1')
+        client=MagicMock();client.chat.completions.create.side_effect=[completion('{"tool":"get_courses","arguments":{}}'),completion('{"answer":"Done"}')]
+        with patch.dict(os.environ,{'OPENAI_API_KEY':'fake-key','CAMPUSPULSE_ALLOW_CLOUD':'1'}),patch('openai.OpenAI',return_value=client):
+            result=await run_lms_query(repo,token,{'message':'My courses','engine':'alem'},transport='direct')
+        self.assertEqual(result['provider'],'alem')
+        self.assertTrue(result['model_called'])
+        self.assertIn('get_courses',result['results'])
+        self.assertEqual(result['results']['get_courses']['courses'][0]['id'],'course')
+
+
+if __name__=='__main__':unittest.main()
+>>>>>>> 126ecb7 (full rework)
