@@ -275,10 +275,8 @@ class AgentBoundaryTests(unittest.IsolatedAsyncioTestCase):
             captured.append(copy.deepcopy(kwargs["contents"]))
             return responses.pop(0)
         client.models.generate_content.side_effect = generate
-        manager = MagicMock(); manager.__enter__.return_value = client
-        connection = SimpleNamespace(model="mock-gemini", client_options=lambda: {"api_key": "not-a-real-key"})
-        with patch("google.genai.Client", return_value=manager):
-            result = await run_lms_query(repo, token, {"message": "Покажи дедлайн", "engine": "gemini"}, connection, transport="direct")
+        with patch.dict(os.environ, {"CAMPUSPULSE_ALLOW_CLOUD": "1", "GOOGLE_CLOUD_PROJECT": "demo-campus", "GOOGLE_CLOUD_LOCATION": "global", "CAMPUSPULSE_VERTEX_MODEL": "mock-gemini"}), patch("google.auth.default", return_value=(MagicMock(), "demo-campus")), patch("google.genai.Client", return_value=client):
+            result = await run_lms_query(repo, token, {"message": "Покажи дедлайн", "engine": "gemini"}, transport="direct")
         returned = [part.function_response.response for content in captured[-1] for part in content.parts if part.function_response]
         self.assertEqual(set(returned[0]["items"][0]), {"title", "due"})
         self.assertNotIn("data_access", returned[0])

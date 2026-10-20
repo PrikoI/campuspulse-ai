@@ -5,12 +5,15 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from .agent import ROOT, gemini_loop
+from .vertex_gemini import VertexConfig, vertex_loop
 from .lms_store import LmsError
 from .lms_tools import LmsTools, schemas_for
 from .lms_validation import agent_payload, tool_arguments
 from .lms_json import json_result, model_result, tool_error
+
+ROOT = Path(__file__).resolve().parent.parent
 
 SYSTEM = """Ты CampusPulse, помощник студенту в LMS. Отвечай кратко по-русски.
 Для каталога всей доступной базы и произвольных данных команды сначала вызови
@@ -99,9 +102,10 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
     if engine == "gemini":
         if not repository.team_database_connected:
             raise LmsError("Командная база ещё не подключена. Gemini не вызывается, чтобы не расходовать квоту на отсутствующие данные. Для отладки используй local.", 503)
-        if connection is None:
-            raise LmsError("Gemini ещё не подключён к LMS. Интеграция провайдера требует отдельной настройки; local доступен.", 503)
-        await asyncio.to_thread(repository.reserve_model_query, actor, maximum=10)
+        if connection is not None:
+            raise LmsError("LMS использует Vertex AI через ADC; Developer API connection не принимается.")
+        config = VertexConfig.from_environment()
+        config.require_enabled()
     trace, results = [], {}
     def report(event):
         trace.append(event)
@@ -133,14 +137,22 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 report({"type": "tool_result", "tool": name, "status": "error", "error": result["error"]})
                 return result
         if engine == "gemini":
-            config = {"mode": "developer", "connection": connection, "model": connection.model,
-                      "max_rounds": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
-                      "system_instruction": SYSTEM + f"\nОткрытая страница: {str(payload.get('page', 'overview'))[:100]}. Предмет: {cid or 'не выбран'}."}
+            instruction = SYSTEM + f"\nОткрытая страница: {payload.get('page', 'overview')}. Предмет: {cid or 'не выбран'}."
             if callable(getattr(repository, "personal_data", None)):
-                config["system_instruction"] += "\nДля личных задач и настроек используй get_personal_data. prepare_personal_change только готовит изменение. Покажи before/after; пользователь подтверждает через отдельный API. Не утверждай, что предложение уже сохранено."
+                instruction += "\nДля личных задач и настроек используй get_personal_data. prepare_personal_change только готовит изменение. Покажи before/after; пользователь подтверждает через отдельный API. Не утверждай, что предложение уже сохранено."
+            reserved = False
+            async def authorize_model_request():
+                nonlocal reserved
+                await asyncio.to_thread(repository.principal, token)
+                if not repository.team_database_connected:
+                    raise LmsError("Соединение с базой недоступно; следующий модельный шаг отменён.", 503)
+                if not reserved:
+                    await asyncio.to_thread(repository.reserve_model_query, actor, maximum=10)
+                    reserved = True
             async def model_invoke(name, arguments=None):
                 return model_result(await invoke(name, arguments))
-            answer = await gemini_loop(message, {"repository": "", "notes": []}, schemas_for(repository), model_invoke, config)
+            answer = await vertex_loop(message, schemas_for(repository), model_invoke, config,
+                                       instruction, report, before_request=authorize_model_request)
         elif "personal_change" in payload:
             data = await invoke("prepare_personal_change", payload["personal_change"])
             answer = data["error"] if data.get("error") else "Изменение подготовлено. Проверьте before/after и подтвердите через API; данные ещё не записаны."
@@ -199,6 +211,8 @@ async def run_lms_query(repository, token, payload, connection=None, emit=None, 
                 answer = data["error"] if data.get("error") else f"Из LMS получено заданий: {len(data.get('assignments', []))}. Можно проверить оценки, посещаемость, материалы или рассчитать план."
     return {"answer": answer, "engine": engine, "reasoning_loop": engine == "gemini", "trace": trace,
             "transport": transport, "model_called": engine == "gemini",
+            "provider": "vertex-ai" if engine == "gemini" else "local",
+            "model": config.model if engine == "gemini" else None,
             "results": results, "source": repository.source, "team_database_connected": repository.team_database_connected,
             "budget": {"max_model_steps": 3, "max_tool_calls": 8, "max_output_tokens": 1200,
                        "model_queries_per_day": 10, "cloud_resources_created": False},

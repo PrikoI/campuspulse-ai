@@ -1,4 +1,4 @@
-"""Loopback LMS API. No frontend, academic fixtures or automatic cloud calls."""
+"""Loopback LMS API and same-origin team frontend; no academic fixtures."""
 import argparse
 import asyncio
 import importlib.util
@@ -8,9 +8,9 @@ import threading
 import time
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .agent import settings
 from .lms_agent import run_lms_query
 from .lms_store import KINDS, LmsError
 from .lms_repository import open_repository
@@ -18,12 +18,23 @@ from .lms_tools import LmsTools
 from .lms_validation import identifier
 from .lms_openapi import openapi_document
 from .lms_data import query_request
+from .vertex_gemini import vertex_status
 from .grading import evaluate_grades
 from .server import Handler, LIMIT, SLOTS, exception_leaves
-from .free_gemini import ConnectionError as GeminiError
 
 LOGIN_ATTEMPTS = {}
 LOGIN_LOCK = threading.Lock()
+LMS_WEB = Path(__file__).resolve().parent.parent / "web" / "lms"
+# Fixed allowlist: never expose sources, credentials, old demo or draft folders.
+FRONTEND_FILES = {
+    "/": ("index.html", "text/html"),
+    "/lms": ("index.html", "text/html"),
+    "/lms/": ("index.html", "text/html"),
+    **{f"/lms-assets/{name}": (name, mime) for name, mime in {
+        "style.css": "text/css", "app.mjs": "text/javascript", "api.mjs": "text/javascript",
+        "ui.mjs": "text/javascript", "forms.mjs": "text/javascript", "agent.mjs": "text/javascript",
+    }.items()},
+}
 
 
 def strict_object(pairs):
@@ -62,11 +73,16 @@ class LmsHandler(Handler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path in {"/", "/lms", "/lms/"}:
+        if parsed.path in FRONTEND_FILES:
             if not self.trusted_host():
                 return
-            self.json_reply({"service": "CampusPulse LMS backend", "api": "/api/v1", "status": "/api/v1/status",
-                             "frontend_connected": False, "source": self.repository.source})
+            name, mime = FRONTEND_FILES[parsed.path]
+            try:
+                data = (LMS_WEB / name).read_bytes()
+            except OSError:
+                return self.json_reply({"error": "Файлы интерфейса LMS отсутствуют. Восстановите web/lms из проекта."}, 503)
+            self.headers_for(200, mime + "; charset=utf-8", len(data))
+            self.wfile.write(data)
             return
         if not parsed.path.startswith("/api/v1/"):
             if not self.trusted_host():
@@ -140,11 +156,12 @@ class LmsHandler(Handler):
                 if not isinstance(payload, dict):
                     raise LmsError("Ожидается объект JSON.")
             if route == ["status"] and method == "GET":
-                return self.json_reply({"version": "0.4.0", "source": self.repository.source,
+                return self.json_reply({"version": "0.5.0", "source": self.repository.source,
                     "team_database_connected": self.repository.team_database_connected, "cloud_deployed": False, "default_engine": "local",
-                    "mcp_available": settings()["mcp_available"], "auto_model_calls": False,
+                    "mcp_available": importlib.util.find_spec("mcp") is not None, "auto_model_calls": False,
                     "transport": getattr(self.server, "transport", "mcp"), "authentication": "temporary-local",
-                    "gemini_available": False, "frontend_connected": False, "openapi": "/api/v1/openapi.json",
+                    "vertex": vertex_status(), "gemini_available": False,
+                    "frontend_connected": all((LMS_WEB / name).is_file() for name, _ in FRONTEND_FILES.values()), "openapi": "/api/v1/openapi.json",
                     "notice": "Командная база не подключена. Собственные базы и учебные примеры не используются." if not self.repository.team_database_connected else "Используется адаптер команды."})
             if route == ["openapi.json"] and method == "GET":
                 return self.json_reply(openapi_document())
@@ -228,7 +245,6 @@ class LmsHandler(Handler):
                 result = LmsTools(self.repository, actor).call(name, args)
                 return self.json_reply(result, result.get("status", 200))
             if route in [["agent", "query"], ["agent", "stream"]] and method == "POST":
-                connection = None  # Provider integration is a separate, explicitly configured step.
                 emit = None
                 if route[-1] == "stream":
                     self.send_response(200)
@@ -238,7 +254,7 @@ class LmsHandler(Handler):
                     self.end_headers(); self.sse_started = True
                     emit = self.emit
                     emit({"type": "started", "source": self.repository.source})
-                result = asyncio.run(asyncio.wait_for(run_lms_query(self.repository, self.lms_token(), payload, connection, emit,
+                result = asyncio.run(asyncio.wait_for(run_lms_query(self.repository, self.lms_token(), payload, emit=emit,
                                     transport=getattr(self.server, "transport", "mcp")), timeout=100))
                 if self.sse_started:
                     self.emit({"type": "complete", "response": result})
@@ -247,7 +263,7 @@ class LmsHandler(Handler):
             raise LmsError("Endpoint не найден.", 404)
         except Exception as error:
             leaves = exception_leaves(error)
-            safe = next((item for item in leaves if isinstance(item, (LmsError, GeminiError))), None)
+            safe = next((item for item in leaves if isinstance(item, LmsError)), None)
             if safe:
                 message, status = str(safe), getattr(safe, "status", 400)
             elif isinstance(error, (ValueError, KeyError, TypeError)):
@@ -274,25 +290,36 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--check", action="store_true", help="Validate local configuration and dependencies without opening a port or calling a model")
+    parser.add_argument("--check-vertex", action="store_true", help="Check Vertex configuration strings only; no ADC discovery or network")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
+    if args.check_vertex:
+        status = vertex_status()
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+        if not status["configured"]:
+            raise SystemExit(2)
+        return
     if importlib.util.find_spec("mcp") is None:
         raise SystemExit("MCP missing. Install requirements.txt into the project .venv. No direct fallback is used.")
+    if args.check:
+        selected = os.getenv("CAMPUSPULSE_LMS_REPOSITORY", "pending")
+        missing = sorted({name for name, _ in FRONTEND_FILES.values() if not (LMS_WEB / name).is_file()})
+        if missing:
+            raise SystemExit("Frontend missing: " + ", ".join(missing))
+        print(f"OK: repository selection={selected}, MCP installed, frontend present; repository/ADC not opened; no database/model request performed.")
+        return
     try:
         repository = open_repository()
     except LmsError as error:
         raise SystemExit(str(error)) from None
-    if args.check:
-        print(f"OK: repository={repository.source}, temporary local auth, MCP installed; no database/model/network request performed.")
-        return
     try:
         server = ThreadingHTTPServer(("127.0.0.1", args.port), LmsHandler)
     except OSError:
         raise SystemExit(f"Cannot bind 127.0.0.1:{args.port}. Check the port or pass --port <number>.") from None
     server.repository, server.transport = repository, "mcp"
     server.daemon_threads = True
-    print(f"CampusPulse backend: http://127.0.0.1:{args.port}/api/v1/status | {repository.source} | cloud deployment disabled", flush=True)
+    print(f"CampusPulse LMS: http://127.0.0.1:{args.port}/ | API: /api/v1 | {repository.source} | cloud deployment disabled", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

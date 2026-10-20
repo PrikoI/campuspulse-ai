@@ -10,7 +10,7 @@ if not exist ".venv\Scripts\python.exe" (
   echo Project .venv is missing. Follow README.md setup instructions.
   exit /b 1
 )
-echo CampusPulse LMS backend. Temporary local auth. Repository: %CAMPUSPULSE_LMS_REPOSITORY%.
-echo No frontend is served. Stop the server with Ctrl+C.
+echo CampusPulse LMS frontend and API. Temporary local auth. Repository: %CAMPUSPULSE_LMS_REPOSITORY%.
+echo Open http://127.0.0.1:8766/ unless --port overrides it. Stop with Ctrl+C.
 ".venv\Scripts\python.exe" -X utf8 -m campuspulse.lms_server %*
 exit /b %errorlevel%

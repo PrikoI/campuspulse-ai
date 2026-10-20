@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CampusPulse AI — LMS</title><link rel="stylesheet" href="/lms-assets/style.css"></head>
+<body><header><strong>CampusPulse <span>AI</span></strong><button id="theme" type="button">Тема</button><span id="identity"></span><button id="logout" type="button" hidden>Выйти</button></header>
+<p id="status" role="status">Проверка сервера…</p>
+<main><section id="login-panel"><h1>Ваш учебный день</h1><p>Войдите в LMS. Данные доступны только в рамках вашей сессии.</p>
+<form id="login"><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button>Войти</button></form></section>
+<section id="workspace" hidden><nav id="navigation" aria-label="Разделы LMS"></nav><label>Дисциплина<select id="course"><option value="">Все доступные</option></select></label>
+<section><h1 id="page-title"></h1><div id="content"></div></section>
+<aside id="agent-panel"><h2>Учебный помощник</h2><p>local — проверяемые функции. Vertex AI требует отдельного разрешённого подключения.</p>
+<form id="agent"><label>Запрос<textarea name="message" maxlength="5000" required></textarea></label><label>Режим<select name="engine"><option value="local">local</option><option value="gemini">Vertex AI</option></select></label><button>Спросить</button></form>
+<p id="answer" role="status"></p><details><summary>Действия инструментов</summary><pre id="trace"></pre></details></aside>
+<section id="review" hidden><h2>Проверьте изменение</h2><pre id="review-data"></pre><button id="confirm" type="button">Подтвердить запись</button><button id="cancel" type="button">Отменить</button></section>
+</section><p id="error" role="alert"></p></main><script type="module" src="/lms-assets/app.mjs"></script></body></html>
